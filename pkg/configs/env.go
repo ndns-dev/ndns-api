@@ -8,6 +8,9 @@ import (
 )
 
 type EnvConfig struct {
+	Server struct {
+		Port string
+	}
 	AWS struct {
 		AccessKeyID      string
 		SecretAccessKey  string
@@ -47,12 +50,14 @@ func NewEnvConfig() (*EnvConfig, error) {
 
 	// 필수 필드 검사 및 로드
 	requiredFields := map[string]string{
-		"aws_access_key_id":            "AWS 접근 키 ID",
-		"aws_secret_access_key":        "AWS 비밀 접근 키",
-		"aws_region":                   "AWS 리전",
-		"aws_dynamodb_table_ocr_cache": "AWS DynamoDB OCR 캐시 테이블",
-		"naver_client_id":              "네이버 클라이언트 ID",
-		"naver_client_secret":          "네이버 클라이언트 비밀 키",
+		"port":                     "서버 포트",
+		"aws_access_key_id":        "AWS 접근 키 ID",
+		"aws_secret_access_key":    "AWS 비밀 접근 키",
+		"aws_region":               "AWS 리전",
+		"dynamodb_endpoint":        "AWS DynamoDB 엔드포인트",
+		"dynamodb_table_ocr_cache": "AWS DynamoDB OCR 캐시 테이블",
+		"naver_client_id":          "네이버 클라이언트 ID",
+		"naver_client_secret":      "네이버 클라이언트 비밀 키",
 	}
 
 	for key, fieldName := range requiredFields {
