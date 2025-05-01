@@ -1,0 +1,28 @@
+# Go 실행 파일
+*.exe
+*.test
+*.out
+
+# 빌드 결과물
+bin/
+
+# 테스트 캐시
+_test/
+
+# Go Modules 관련
+go.sum
+vendor/
+
+# 임시 파일 및 디렉토리 (에디터, IDE 관련)
+.idea/
+.vscode/
+*.swp
+*.swo
+*.sashimi
+*.DS_Store
+
+# OS 관련 임시 파일
+._*
+
+# 개인 설정 파일 (선택 사항)
+.env
