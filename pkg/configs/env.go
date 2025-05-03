@@ -3,101 +3,127 @@ package configs
 import (
 	"fmt"
 	"log"
+	"strings"
+	"sync"
 
 	"github.com/spf13/viper"
 )
 
 type EnvConfig struct {
 	Server struct {
-		Port string
+		Port string `mapstructure:"PORT"`
 	}
 	AWS struct {
-		AccessKeyID      string
-		SecretAccessKey  string
-		Region           string
-		DynamoDBEndpoint string
+		AccessKeyID      string `mapstructure:"AWS_ACCESS_KEY_ID"`
+		SecretAccessKey  string `mapstructure:"AWS_SECRET_ACCESS_KEY"`
+		Region           string `mapstructure:"AWS_REGION"`
+		DynamoDBEndpoint string `mapstructure:"AWS_DYNAMODB_ENDPOINT"`
 		Tables           struct {
-			OCRCache string
+			OCRCache string `mapstructure:"AWS_DYNAMODB_TABLE_OCR_CACHE"`
 		}
 	}
 	Naver struct {
-		ClientID     string
-		ClientSecret string
-		SearchURL    string
+		ClientID     string `mapstructure:"NAVER_CLIENT_ID"`
+		ClientSecret string `mapstructure:"NAVER_CLIENT_SECRET"`
+		SearchURL    string `mapstructure:"NAVER_SEARCH_URL"`
 	}
 	OCR struct {
-		TesseractPath string
-		TempDir       string
+		TesseractPath string `mapstructure:"OCR_TESSERACT_PATH"`
+		TempDir       string `mapstructure:"OCR_TEMP_DIR"`
 	}
 	Weight struct {
-		ExactSponsorKeywords float64
-		SponsorKeywords      float64
-		LowSponsorKeywords   float64
+		ExactSponsorKeywords float64 `mapstructure:"WEIGHT_EXACT_SPONSOR_KEYWORDS"`
+		SponsorKeywords      float64 `mapstructure:"WEIGHT_SPONSOR_KEYWORDS"`
+		LowSponsorKeywords   float64 `mapstructure:"WEIGHT_LOW_SPONSOR_KEYWORDS"`
 	}
 }
 
-func NewEnvConfig() (*EnvConfig, error) {
-	viper.SetConfigFile(".env")
-	err := viper.ReadInConfig()
-	if err != nil {
-		// .env 파일이 없어도 괜찮다면 이 오류 처리는 넘어가도 됩니다.
-		// fmt.Println("Error reading .env file")
-	}
+var (
+	configInstance *EnvConfig
+	once           sync.Once
+)
 
+// loadConfig는 환경 변수를 로드하고 검증하는 내부 함수
+func loadConfig() *EnvConfig {
+	viper.SetConfigFile(".env")
+	viper.ReadInConfig()
 	viper.AutomaticEnv()
 
-	config := &EnvConfig{}
-
-	// 필수 필드 검사 및 로드
-	requiredFields := map[string]string{
-		"port":                     "서버 포트",
-		"aws_access_key_id":        "AWS 접근 키 ID",
-		"aws_secret_access_key":    "AWS 비밀 접근 키",
-		"aws_region":               "AWS 리전",
-		"dynamodb_endpoint":        "AWS DynamoDB 엔드포인트",
-		"dynamodb_table_ocr_cache": "AWS DynamoDB OCR 캐시 테이블",
-		"naver_client_id":          "네이버 클라이언트 ID",
-		"naver_client_secret":      "네이버 클라이언트 비밀 키",
+	// 필수 환경 변수 확인
+	requiredEnvVars := []string{
+		"PORT",
+		"AWS_ACCESS_KEY_ID",
+		"AWS_SECRET_ACCESS_KEY",
+		"AWS_REGION",
+		"AWS_DYNAMODB_ENDPOINT",
+		"AWS_DYNAMODB_TABLE_OCR_CACHE",
+		"NAVER_CLIENT_ID",
+		"NAVER_CLIENT_SECRET",
 	}
 
-	for key, fieldName := range requiredFields {
-		if !viper.IsSet(key) {
-			return nil, fmt.Errorf(".env 파일 또는 환경 변수에 %s(%s)이 정의되어 있지 않습니다", fieldName, key)
+	missingVars := []string{}
+	for _, envVar := range requiredEnvVars {
+		if !viper.IsSet(envVar) {
+			missingVars = append(missingVars, envVar)
 		}
 	}
 
-	err = viper.Unmarshal(config)
-	if err != nil {
-		return nil, fmt.Errorf("설정 언마샬링 실패: %w", err)
+	if len(missingVars) > 0 {
+		log.Fatalf("필수 환경 변수가 설정되지 않았습니다: %s", strings.Join(missingVars, ", "))
 	}
 
-	// 기본값 설정 (Unmarshal 이후)
-	if config.Naver.SearchURL == "" {
-		viper.SetDefault("naver.search_url", "https://openapi.naver.com/v1/search/blog.json")
-		config.Naver.SearchURL = viper.GetString("naver.search_url")
-	}
-	if config.OCR.TesseractPath == "" {
-		viper.SetDefault("ocr.tesseract_path", "/usr/local/bin/tesseract")
-		config.OCR.TesseractPath = viper.GetString("ocr.tesseract_path")
-	}
-	if config.OCR.TempDir == "" {
-		viper.SetDefault("ocr.temp_dir", "/tmp")
-		config.OCR.TempDir = viper.GetString("ocr.temp_dir")
-	}
-	viper.SetDefault("weight.exact_sponsor_keywords", 0.9)
-	config.Weight.ExactSponsorKeywords = viper.GetFloat64("weight.exact_sponsor_keywords")
-	viper.SetDefault("weight.sponsor_keywords", 0.7)
-	config.Weight.SponsorKeywords = viper.GetFloat64("weight.sponsor_keywords")
-	viper.SetDefault("weight.low_sponsor_keywords", 0.5)
-	config.Weight.LowSponsorKeywords = viper.GetFloat64("weight.low_sponsor_keywords")
+	// 기본값 설정
+	viper.SetDefault("NAVER_SEARCH_URL", "https://openapi.naver.com/v1/search/blog.json")
+	viper.SetDefault("OCR_TESSERACT_PATH", "/usr/local/bin/tesseract")
+	viper.SetDefault("OCR_TEMP_DIR", "/tmp")
+	viper.SetDefault("WEIGHT_EXACT_SPONSOR_KEYWORDS", 0.9)
+	viper.SetDefault("WEIGHT_SPONSOR_KEYWORDS", 0.7)
+	viper.SetDefault("WEIGHT_LOW_SPONSOR_KEYWORDS", 0.5)
 
-	return config, nil
+	// 환경 변수 키-구조체 필드 매핑 정의
+	config := &EnvConfig{}
+	envMapping := map[string]*string{
+		"PORT":                         &config.Server.Port,
+		"AWS_ACCESS_KEY_ID":            &config.AWS.AccessKeyID,
+		"AWS_SECRET_ACCESS_KEY":        &config.AWS.SecretAccessKey,
+		"AWS_REGION":                   &config.AWS.Region,
+		"AWS_DYNAMODB_ENDPOINT":        &config.AWS.DynamoDBEndpoint,
+		"AWS_DYNAMODB_TABLE_OCR_CACHE": &config.AWS.Tables.OCRCache,
+		"NAVER_CLIENT_ID":              &config.Naver.ClientID,
+		"NAVER_CLIENT_SECRET":          &config.Naver.ClientSecret,
+		"NAVER_SEARCH_URL":             &config.Naver.SearchURL,
+		"OCR_TESSERACT_PATH":           &config.OCR.TesseractPath,
+		"OCR_TEMP_DIR":                 &config.OCR.TempDir,
+	}
+
+	// float64 타입 필드용 별도 매핑
+	envFloatMapping := map[string]*float64{
+		"WEIGHT_EXACT_SPONSOR_KEYWORDS": &config.Weight.ExactSponsorKeywords,
+		"WEIGHT_SPONSOR_KEYWORDS":       &config.Weight.SponsorKeywords,
+		"WEIGHT_LOW_SPONSOR_KEYWORDS":   &config.Weight.LowSponsorKeywords,
+	}
+	fmt.Println("환경 변수 로드 중...")
+	// 필드에 환경 변수 값 매핑 - 문자열 필드
+	for key, field := range envMapping {
+		*field = viper.GetString(key)
+		fmt.Printf("%s: '%s'\n", key, *field) // 디버깅용
+	}
+
+	// 필드에 환경 변수 값 매핑 - float64 필드
+	for key, field := range envFloatMapping {
+		*field = viper.GetFloat64(key)
+		fmt.Printf("%s: '%f'\n", key, *field) // 디버깅용
+	}
+
+	return config
 }
 
+// GetConfig는 EnvConfig의 싱글톤 인스턴스를 반환합니다.
+// 처음 호출 시에만 환경 변수를 로드하고 이후 호출에서는 캐시된 인스턴스를 반환합니다.
 func GetConfig() *EnvConfig {
-	config, err := NewEnvConfig()
-	if err != nil {
-		log.Fatalf("설정 로드 실패: %v", err)
-	}
-	return config
+	once.Do(func() {
+		configInstance = loadConfig()
+		fmt.Println("환경 변수 로드 완료")
+	})
+	return configInstance
 }
