@@ -4,13 +4,13 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/sh5080/ndns-go/pkg/types/structures"
+	structure "github.com/sh5080/ndns-go/pkg/types/structures"
 )
 
 // DetectTextInPosts는 여러 포스트에서 동시에 스폰서 관련 텍스트를 탐지합니다
-func DetectTextInPosts(posts []structures.NaverSearchItem) []structures.BlogPost {
+func DetectTextInPosts(posts []structure.NaverSearchItem) []structure.BlogPost {
 	// 결과를 저장할 슬라이스 초기화
-	results := make([]structures.BlogPost, len(posts))
+	results := make([]structure.BlogPost, len(posts))
 
 	// 동시성 제어를 위한 WaitGroup
 	var wg sync.WaitGroup
@@ -24,7 +24,7 @@ func DetectTextInPosts(posts []structures.NaverSearchItem) []structures.BlogPost
 		wg.Add(1)
 
 		// 고루틴으로 포스트 분석
-		go func(index int, item structures.NaverSearchItem) {
+		go func(index int, item structure.NaverSearchItem) {
 			defer wg.Done()
 
 			// 외부 신호 확인 (다른 고루틴에서 이미 확실한 스폰서를 발견한 경우)
@@ -37,11 +37,11 @@ func DetectTextInPosts(posts []structures.NaverSearchItem) []structures.BlogPost
 			}
 
 			// 블로그 포스트 초기화
-			blogPost := structures.BlogPost{
+			blogPost := structure.BlogPost{
 				NaverSearchItem:    item,
 				IsSponsored:        false,
 				SponsorProbability: 0,
-				SponsorIndicators:  []structures.SponsorIndicator{},
+				SponsorIndicators:  []structure.SponsorIndicator{},
 			}
 
 			// 텍스트 탐지 수행
@@ -84,12 +84,12 @@ func DetectTextInPosts(posts []structures.NaverSearchItem) []structures.BlogPost
 }
 
 // detectText는 텍스트에서 스폰서 여부를 탐지합니다
-func detectText(text string) (*structures.SponsorIndicator, float64) {
+func detectText(text string) (*structure.SponsorIndicator, float64) {
 	// 텍스트 전처리 (소문자 변환)
 	textLower := strings.ToLower(text)
 
 	// SPECIAL_CASE_PATTERNS 패턴 확인
-	for patternName, pattern := range structures.SPECIAL_CASE_PATTERNS {
+	for patternName, pattern := range structure.SPECIAL_CASE_PATTERNS {
 		// terms1과 terms2 모두 포함하는지 확인
 		term1Found := false
 		term2Found := false
@@ -114,8 +114,8 @@ func detectText(text string) (*structures.SponsorIndicator, float64) {
 
 		// 두 용어 그룹이 모두 있으면 높은 확률로 판단
 		if term1Found && term2Found {
-			return &structures.SponsorIndicator{
-				Type:        structures.IndicatorTypeKeyword,
+			return &structure.SponsorIndicator{
+				Type:        structure.IndicatorTypeKeyword,
 				Pattern:     patternName,
 				MatchedText: term1Match + " + " + term2Match,
 				Probability: 0.9, // 90% 확률
@@ -124,10 +124,10 @@ func detectText(text string) (*structures.SponsorIndicator, float64) {
 	}
 
 	// 정확한 스폰서 키워드 확인
-	for _, exactKeyword := range structures.EXACT_SPONSOR_KEYWORDS_PATTERNS {
+	for _, exactKeyword := range structure.EXACT_SPONSOR_KEYWORDS_PATTERNS {
 		if strings.Contains(textLower, strings.ToLower(exactKeyword)) {
-			return &structures.SponsorIndicator{
-				Type:        structures.IndicatorTypeExactKeywordRegex,
+			return &structure.SponsorIndicator{
+				Type:        structure.IndicatorTypeExactKeywordRegex,
 				Pattern:     exactKeyword,
 				MatchedText: exactKeyword,
 				Probability: 0.9, // 90% 확률
@@ -140,7 +140,7 @@ func detectText(text string) (*structures.SponsorIndicator, float64) {
 	var bestMatch string
 	var bestPattern string
 
-	for keyword, weight := range structures.SPONSOR_KEYWORDS {
+	for keyword, weight := range structure.SPONSOR_KEYWORDS {
 		if strings.Contains(textLower, strings.ToLower(keyword)) {
 			if weight > maxProbability {
 				maxProbability = weight
@@ -152,8 +152,8 @@ func detectText(text string) (*structures.SponsorIndicator, float64) {
 
 	// 가장 높은 가중치의 키워드가 있으면 반환
 	if maxProbability > 0 {
-		return &structures.SponsorIndicator{
-			Type:        structures.IndicatorTypeKeyword,
+		return &structure.SponsorIndicator{
+			Type:        structure.IndicatorTypeKeyword,
 			Pattern:     bestPattern,
 			MatchedText: bestMatch,
 			Probability: maxProbability,
@@ -207,6 +207,6 @@ func DetectTextAsync(texts []string) <-chan SponsorDetectionResult {
 // SponsorDetectionResult는 스폰서 감지 결과를 나타냅니다
 type SponsorDetectionResult struct {
 	Index       int
-	Indicator   *structures.SponsorIndicator
+	Indicator   *structure.SponsorIndicator
 	Probability float64
 }

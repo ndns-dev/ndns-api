@@ -1,4 +1,4 @@
-package structures
+package structure
 
 type NaverSearchItem struct {
 	Title       string `json:"title"`

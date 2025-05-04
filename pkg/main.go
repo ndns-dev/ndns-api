@@ -8,7 +8,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/sh5080/ndns-go/pkg/configs"
-	"github.com/sh5080/ndns-go/pkg/routes"
+	route "github.com/sh5080/ndns-go/pkg/routes"
 )
 
 func main() {
@@ -21,7 +21,7 @@ func main() {
 	app.Use(logger.New())
 	app.Use(cors.New())
 
-	routes.SetupRoutes(app)
+	route.SetupRoutes(app)
 
 	port := configs.GetConfig().Server.Port
 

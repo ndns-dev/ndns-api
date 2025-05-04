@@ -1,4 +1,4 @@
-package structures
+package structure
 
 type SponsorIndicator struct {
 	Type        IndicatorType  `json:"type"`

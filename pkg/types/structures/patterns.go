@@ -1,4 +1,4 @@
-package structures
+package structure
 
 var EXACT_SPONSOR_KEYWORDS_PATTERNS = []string{
 	"원고료",

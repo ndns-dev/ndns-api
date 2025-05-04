@@ -5,15 +5,15 @@ import (
 	"sync"
 
 	"github.com/sh5080/ndns-go/pkg/configs"
-	"github.com/sh5080/ndns-go/pkg/types/structures"
+	structure "github.com/sh5080/ndns-go/pkg/types/structures"
 )
 
 var weightPreference = configs.GetConfig().Weight
 
 // AnalyzeWithCrawling은 블로그 포스트를 크롤링하고 분석합니다
-func AnalyzeWithCrawling(posts []structures.BlogPost, crawler CrawlerFunc, ocrExtractor OCRFunc, ocrCache OCRCacheFunc) []structures.BlogPost {
+func AnalyzeWithCrawling(posts []structure.BlogPost, crawler CrawlerFunc, ocrExtractor OCRFunc, ocrCache OCRCacheFunc) []structure.BlogPost {
 	// 결과 복사 (참조 방지)
-	results := make([]structures.BlogPost, len(posts))
+	results := make([]structure.BlogPost, len(posts))
 	copy(results, posts)
 
 	// 이미 확실한 스폰서로 판단된 포스트가 있는지 확인
@@ -40,7 +40,7 @@ func AnalyzeWithCrawling(posts []structures.BlogPost, crawler CrawlerFunc, ocrEx
 			wg.Add(1)
 
 			// 고루틴으로 크롤링 및 분석 (병렬 처리)
-			go func(index int, blogPost structures.BlogPost) {
+			go func(index int, blogPost structure.BlogPost) {
 				defer wg.Done()
 
 				// HTML 콘텐츠 크롤링
@@ -59,8 +59,8 @@ func AnalyzeWithCrawling(posts []structures.BlogPost, crawler CrawlerFunc, ocrEx
 
 						// 소스 정보 추가
 						for i := range indicators {
-							indicators[i].Source = &structures.SponsorSource{
-								SponsorType: structures.SponsorTypeFirstParagraph,
+							indicators[i].Source = &structure.SponsorSource{
+								SponsorType: structure.SponsorTypeFirstParagraph,
 								Text:        crawlResult.FirstParagraph,
 							}
 						}
@@ -93,20 +93,20 @@ func AnalyzeWithCrawling(posts []structures.BlogPost, crawler CrawlerFunc, ocrEx
 }
 
 // analyzeImages는 이미지들을 OCR로 분석합니다
-func analyzeImages(crawlResult *structures.CrawlResult, ocrExtractor OCRFunc, ocrCache OCRCacheFunc, post *structures.BlogPost, mu *sync.Mutex) {
+func analyzeImages(crawlResult *structure.CrawlResult, ocrExtractor OCRFunc, ocrCache OCRCacheFunc, post *structure.BlogPost, mu *sync.Mutex) {
 	// 첫 번째 스티커 이미지 URL 탐지
 	if crawlResult.StickerURL != "" {
-		analyzeImage(crawlResult.StickerURL, structures.SponsorTypeSticker, ocrExtractor, ocrCache, post, mu)
+		analyzeImage(crawlResult.StickerURL, structure.SponsorTypeSticker, ocrExtractor, ocrCache, post, mu)
 	}
 
 	// 첫 번째 일반 이미지 URL 탐지
 	if crawlResult.ImageURL != "" {
-		analyzeImage(crawlResult.ImageURL, structures.SponsorTypeImage, ocrExtractor, ocrCache, post, mu)
+		analyzeImage(crawlResult.ImageURL, structure.SponsorTypeImage, ocrExtractor, ocrCache, post, mu)
 	}
 }
 
 // analyzeImage는 단일 이미지를 OCR로 분석합니다
-func analyzeImage(imageURL string, sponsorType structures.SponsorType, ocrExtractor OCRFunc, ocrCache OCRCacheFunc, post *structures.BlogPost, mu *sync.Mutex) {
+func analyzeImage(imageURL string, sponsorType structure.SponsorType, ocrExtractor OCRFunc, ocrCache OCRCacheFunc, post *structure.BlogPost, mu *sync.Mutex) {
 	// DB에서 OCR 결과 조회
 	ocrResult, found := ocrCache(imageURL)
 
@@ -131,7 +131,7 @@ func analyzeImage(imageURL string, sponsorType structures.SponsorType, ocrExtrac
 
 		// 소스 정보 추가
 		for i := range indicators {
-			indicators[i].Source = &structures.SponsorSource{
+			indicators[i].Source = &structure.SponsorSource{
 				SponsorType: sponsorType,
 				Text:        ocrText,
 			}
@@ -152,16 +152,16 @@ func analyzeImage(imageURL string, sponsorType structures.SponsorType, ocrExtrac
 }
 
 // DetectSponsorInOCR은 OCR 텍스트에서 스폰서 여부를 감지합니다
-func DetectSponsorInOCR(ocrText string) (bool, float64, []structures.SponsorIndicator) {
-	var indicators []structures.SponsorIndicator
+func DetectSponsorInOCR(ocrText string) (bool, float64, []structure.SponsorIndicator) {
+	var indicators []structure.SponsorIndicator
 	maxProbability := 0.0
 	isSponsored := false
 
 	// 정확한 스폰서 키워드 확인
-	for _, exactKeyword := range structures.EXACT_SPONSOR_KEYWORDS_PATTERNS {
+	for _, exactKeyword := range structure.EXACT_SPONSOR_KEYWORDS_PATTERNS {
 		if strings.Contains(strings.ToLower(ocrText), strings.ToLower(exactKeyword)) {
-			indicator := structures.SponsorIndicator{
-				Type:        structures.IndicatorTypeExactKeywordRegex,
+			indicator := structure.SponsorIndicator{
+				Type:        structure.IndicatorTypeExactKeywordRegex,
 				Pattern:     exactKeyword,
 				MatchedText: exactKeyword,
 				Probability: weightPreference.ExactSponsorKeywords,
@@ -177,10 +177,10 @@ func DetectSponsorInOCR(ocrText string) (bool, float64, []structures.SponsorIndi
 	}
 
 	// 단일 키워드 패턴 확인
-	for keyword, weight := range structures.SPONSOR_KEYWORDS {
+	for keyword, weight := range structure.SPONSOR_KEYWORDS {
 		if weight >= weightPreference.LowSponsorKeywords && strings.Contains(strings.ToLower(ocrText), strings.ToLower(keyword)) {
-			indicator := structures.SponsorIndicator{
-				Type:        structures.IndicatorTypeKeyword,
+			indicator := structure.SponsorIndicator{
+				Type:        structure.IndicatorTypeKeyword,
 				Pattern:     keyword,
 				MatchedText: keyword,
 				Probability: weight,
@@ -203,6 +203,6 @@ func DetectSponsorInOCR(ocrText string) (bool, float64, []structures.SponsorIndi
 }
 
 // 필요한 함수 타입 정의
-type CrawlerFunc func(url string) (*structures.CrawlResult, error)
+type CrawlerFunc func(url string) (*structure.CrawlResult, error)
 type OCRFunc func(imageURL string) (string, error)
 type OCRCacheFunc func(imageURL string) (string, bool)
