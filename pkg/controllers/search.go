@@ -1,41 +1,38 @@
 package controller
 
 import (
+	"fmt"
+
 	"github.com/gofiber/fiber/v2"
-	service "github.com/sh5080/ndns-go/pkg/services"
-	request "github.com/sh5080/ndns-go/pkg/types/dtos/requests"
-	response "github.com/sh5080/ndns-go/pkg/types/dtos/responses"
+	_interface "github.com/sh5080/ndns-go/pkg/interfaces"
+	requestDto "github.com/sh5080/ndns-go/pkg/types/dtos/requests"
+	responseDto "github.com/sh5080/ndns-go/pkg/types/dtos/responses"
 	"github.com/sh5080/ndns-go/pkg/utils"
 )
 
-// .SearchResponse는 검색 요청을 처리하는 핸들러입니다
-func Search(searchService service.SearchService, sponsorDetectorService service.SponsorDetectorService) fiber.Handler {
-	validate := utils.NewValidator()
-
+// Search는 검색 요청을 처리하는 핸들러입니다
+func Search(searchService _interface.SearchService, sponsorService _interface.SponsorService) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// 요청 파싱
-		var req request.SearchQuery
-		// 요청 유효성 검사
-		errors := validate.Validate(req)
-		if errors.HasErrors() {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": errors.Error(),
-			})
+		queries := c.Queries()
+		var req requestDto.SearchQuery
+		if err := utils.ParseAndValidate(queries, &req); err != nil {
+			fmt.Printf("검증 오류: %v\n", err)
+			return err
 		}
+		fmt.Printf("검증된 DTO: %+v\n", req)
 
-		// 기본값 설정
 		limit, offset := utils.PaginationRequest(req.Limit, req.Offset)
+		fmt.Printf("limit: %d, offset: %d\n", limit, offset)
 
-		// 검색 실행
-		posts, err := searchService.SearchBlogPosts(req.Query, limit, offset+1)
+		posts, err := searchService.SearchBlogPosts(req)
+		fmt.Printf("검색 결과: %+v\n", posts)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": "검색 중 오류 발생: " + err.Error(),
 			})
 		}
 
-		// 응답 생성
-		response := response.Search{
+		response := responseDto.Search{
 			Keyword:          req.Query,
 			TotalResults:     len(posts),
 			SponsoredResults: 0,

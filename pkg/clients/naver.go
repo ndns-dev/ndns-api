@@ -9,37 +9,31 @@ import (
 	"time"
 
 	"github.com/sh5080/ndns-go/pkg/configs"
+	_interface "github.com/sh5080/ndns-go/pkg/interfaces"
 	structure "github.com/sh5080/ndns-go/pkg/types/structures"
 )
 
 // NaverAPIClient는 네이버 API 요청을 처리하는 클라이언트입니다.
 type NaverAPIClient struct {
-	client *http.Client
-	config *configs.EnvConfig
+	_interface.Service
 }
 
 // NewNaverAPIClient는 새로운 네이버 API 클라이언트를 생성합니다.
 func NewNaverAPIClient(config *configs.EnvConfig) *NaverAPIClient {
 	return &NaverAPIClient{
-		client: &http.Client{
-			Timeout: time.Second * 10, // 10초 타임아웃
+		Service: _interface.Service{
+			Client: &http.Client{
+				Timeout: time.Second * 10, // 10초 타임아웃
+			},
+			Config: config,
 		},
-		config: config,
 	}
 }
 
 // SearchBlog는 네이버 블로그 검색 API를 호출하여 결과를 반환합니다.
 func (c *NaverAPIClient) SearchBlog(query string, display int, start int) (*structure.NaverSearchResponse, error) {
-	if c.config == nil {
-		return nil, fmt.Errorf("설정이 초기화되지 않았습니다")
-	}
+	searchURL := c.Config.Naver.SearchURL
 
-	searchURL := c.config.Naver.SearchURL
-	if searchURL == "" {
-		return nil, fmt.Errorf("검색 URL이 설정되지 않았습니다")
-	}
-
-	// URL 파라미터 추가
 	params := url.Values{}
 	params.Add("query", query)
 	params.Add("display", fmt.Sprintf("%d", display))
@@ -56,11 +50,11 @@ func (c *NaverAPIClient) SearchBlog(query string, display int, start int) (*stru
 	}
 
 	// API 인증 헤더 추가
-	req.Header.Add("X-Naver-Client-Id", c.config.Naver.ClientID)
-	req.Header.Add("X-Naver-Client-Secret", c.config.Naver.ClientSecret)
+	req.Header.Add("X-Naver-Client-Id", c.Config.Naver.ClientID)
+	req.Header.Add("X-Naver-Client-Secret", c.Config.Naver.ClientSecret)
 
 	// 요청 실행
-	resp, err := c.client.Do(req)
+	resp, err := c.Client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("요청 실행 실패: %v", err)
 	}

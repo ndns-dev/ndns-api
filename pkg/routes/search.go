@@ -1,13 +1,12 @@
-package routes
+package route
 
 import (
 	"github.com/gofiber/fiber/v2"
 	controller "github.com/sh5080/ndns-go/pkg/controllers"
-	service "github.com/sh5080/ndns-go/pkg/services"
+	_interface "github.com/sh5080/ndns-go/pkg/interfaces"
 )
 
 // SetupSearchRoutes는 검색 관련 라우트를 설정합니다
-func SetupSearchRoutes(endpoint string, api fiber.Router, services *service.ServiceContainer) {
-	// 이미 초기화된 서비스 사용
-	api.Post(endpoint, controller.Search(services.SearchService, services.SponsorDetectorService))
+func SetupSearchRoutes(endpoint string, api fiber.Router, services *_interface.ServiceContainer) {
+	api.Get(endpoint, controller.Search(services.SearchService, services.SponsorService))
 }

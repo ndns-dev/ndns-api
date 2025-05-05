@@ -5,32 +5,27 @@ import (
 
 	naver "github.com/sh5080/ndns-go/pkg/clients"
 	"github.com/sh5080/ndns-go/pkg/configs"
-	detector "github.com/sh5080/ndns-go/pkg/services/internal/detector"
+	_interface "github.com/sh5080/ndns-go/pkg/interfaces"
+	"github.com/sh5080/ndns-go/pkg/services/internal/detector"
 	request "github.com/sh5080/ndns-go/pkg/types/dtos/requests"
 	structure "github.com/sh5080/ndns-go/pkg/types/structures"
 )
 
-// SearchService는 검색 서비스 인터페이스입니다
-type SearchService interface {
-	// SearchBlogPosts는 검색어로 블로그 포스트를 검색합니다
-	SearchBlogPosts(req request.SearchQuery) ([]structure.BlogPost, error)
-}
-
 // SearchImpl는 검색 서비스 구현체입니다
 type SearchImpl struct {
-	config         *configs.EnvConfig
+	_interface.Service
 	naverClient    *naver.NaverAPIClient
-	sponsorService detector.SponsorService
+	sponsorService _interface.SponsorService
 }
 
 // NewSearchService는 새 검색 서비스를 생성합니다
-func NewSearchService() SearchService {
+func NewSearchService() _interface.SearchService {
 	config := configs.GetConfig()
 	naverClient := naver.NewNaverAPIClient(config)
 	sponsorService := detector.NewSponsorService()
 
 	return &SearchImpl{
-		config:         config,
+		Service:        _interface.Service{Config: config},
 		naverClient:    naverClient,
 		sponsorService: sponsorService,
 	}
@@ -38,10 +33,6 @@ func NewSearchService() SearchService {
 
 // SearchBlogPosts는 검색어로 블로그 포스트를 검색합니다
 func (s *SearchImpl) SearchBlogPosts(req request.SearchQuery) ([]structure.BlogPost, error) {
-	if s.config == nil {
-		return nil, fmt.Errorf("config가 초기화되지 않았습니다")
-	}
-
 	if s.naverClient == nil {
 		return nil, fmt.Errorf("네이버 API 클라이언트가 초기화되지 않았습니다")
 	}
