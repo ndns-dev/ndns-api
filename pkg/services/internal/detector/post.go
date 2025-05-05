@@ -1,15 +1,17 @@
-package utils
+package detector
 
 import (
 	"fmt"
 	"strings"
 	"sync"
 
+	_interface "github.com/sh5080/ndns-go/pkg/interfaces"
+	"github.com/sh5080/ndns-go/pkg/services/internal/crawler"
 	structure "github.com/sh5080/ndns-go/pkg/types/structures"
 )
 
 // DetectTextInPosts는 여러 포스트에서 동시에 스폰서 관련 텍스트를 탐지합니다
-func DetectTextInPosts(posts []structure.NaverSearchItem) []structure.BlogPost {
+func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interface.OCRFunc, ocrCache _interface.OCRCacheFunc) []structure.BlogPost {
 	// 결과를 저장할 슬라이스 초기화
 	results := make([]structure.BlogPost, len(posts))
 
@@ -47,10 +49,58 @@ func DetectTextInPosts(posts []structure.NaverSearchItem) []structure.BlogPost {
 
 			// 텍스트 탐지 수행
 			isSponsored, probability, indicators := DetectSponsor(item.Description)
-			blogPost.IsSponsored = isSponsored
-			blogPost.SponsorProbability = probability
-			blogPost.SponsorIndicators = indicators
 
+			if isSponsored {
+				blogPost.IsSponsored = isSponsored
+				blogPost.SponsorProbability = probability
+				blogPost.SponsorIndicators = indicators
+			} else {
+				// Description에서 스폰서 탐지 실패시 본문 크롤링
+				crawlResult, err := crawler.CrawlBlogPost(item.Link)
+				fmt.Printf("crawlResult: %v\n", crawlResult)
+				fmt.Printf("crawlResult.FirstParagraph: %v\n", crawlResult.FirstParagraph)
+				fmt.Printf("crawlResult.StickerURL: %v\n", crawlResult.StickerURL)
+				fmt.Printf("crawlResult.ImageURL: %v\n", crawlResult.ImageURL)
+				if err != nil {
+					fmt.Printf("%s", err.Error())
+				}
+				isSponsored, probability, indicators = DetectSponsor(crawlResult.FirstParagraph)
+				fmt.Printf("FirstParagraph isSponsored1: %t\n", isSponsored)
+				if isSponsored {
+					blogPost.IsSponsored = isSponsored
+					blogPost.SponsorProbability = probability
+					blogPost.SponsorIndicators = indicators
+				} else {
+					// 크롤링한 본문에서 스폰서 탐지 실패시 스티커 이미지 ocr
+					ocrText, err := ocrExtractor(crawlResult.StickerURL)
+					if err != nil {
+						fmt.Printf("%s", err.Error())
+					}
+					fmt.Printf("ocrText: %s\n", ocrText)
+					isSponsored, probability, indicators = DetectSponsor(ocrText)
+					fmt.Printf("ImageURL isSponsored2: %t\n", isSponsored)
+					if isSponsored {
+						blogPost.IsSponsored = isSponsored
+						blogPost.SponsorProbability = probability
+						blogPost.SponsorIndicators = indicators
+					} else {
+						// 크롤링한 본문에서 스폰서 탐지 실패시 일반 이미지 ocr
+						ocrText, err := ocrExtractor(crawlResult.ImageURL)
+						if err != nil {
+							fmt.Printf("%s", err.Error())
+						}
+						isSponsored, probability, indicators = DetectSponsor(ocrText)
+						fmt.Printf("StickerURL isSponsored3: %t\n", isSponsored)
+						if isSponsored {
+							blogPost.IsSponsored = isSponsored
+							blogPost.SponsorProbability = probability
+							blogPost.SponsorIndicators = indicators
+						}
+					}
+
+				}
+
+			}
 			// 확률이 90% 이상이면 확실한 스폰서로 판단하고 다른 고루틴에게 알림
 			if isSponsored && probability >= 0.9 {
 				// 뮤텍스로 경쟁 상태 방지
@@ -83,7 +133,7 @@ func DetectSponsor(text string) (bool, float64, []structure.SponsorIndicator) {
 	var indicators []structure.SponsorIndicator
 	maxProbability := 0.0
 	isSponsored := false
-
+	fmt.Printf("text1111111: %v\n", text)
 	// SPECIAL_CASE_PATTERNS 패턴 확인
 	for patternName, pattern := range structure.SPECIAL_CASE_PATTERNS {
 		// terms1과 terms2 모두 포함하는지 확인
@@ -93,8 +143,6 @@ func DetectSponsor(text string) (bool, float64, []structure.SponsorIndicator) {
 		var term1Match, term2Match string
 
 		for _, term1 := range pattern.Terms1 {
-			fmt.Printf("text: %s\n", text)
-			fmt.Printf("term1: %s\n", term1)
 			if strings.Contains(text, term1) {
 				term1Found = true
 				term1Match = term1
@@ -103,15 +151,12 @@ func DetectSponsor(text string) (bool, float64, []structure.SponsorIndicator) {
 		}
 
 		for _, term2 := range pattern.Terms2 {
-			fmt.Printf("term2: %s\n", term2)
 			if strings.Contains(text, term2) {
 				term2Found = true
 				term2Match = term2
 				break
 			}
 		}
-		fmt.Printf("term1Found: %t\n", term1Found)
-		fmt.Printf("term2Found: %t\n", term2Found)
 		// 두 용어 그룹이 모두 있으면 높은 확률로 판단
 		if term1Found && term2Found {
 			indicator := structure.SponsorIndicator{
