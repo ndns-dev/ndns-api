@@ -32,7 +32,6 @@ type BlogPost struct {
 }
 
 type CrawlResult struct {
-	Title          string
 	URL            string
 	FirstParagraph string
 	Content        string
