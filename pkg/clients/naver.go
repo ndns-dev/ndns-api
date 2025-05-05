@@ -1,0 +1,87 @@
+package naver
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"time"
+
+	"github.com/sh5080/ndns-go/pkg/configs"
+	structure "github.com/sh5080/ndns-go/pkg/types/structures"
+)
+
+// NaverAPIClient는 네이버 API 요청을 처리하는 클라이언트입니다.
+type NaverAPIClient struct {
+	client *http.Client
+	config *configs.EnvConfig
+}
+
+// NewNaverAPIClient는 새로운 네이버 API 클라이언트를 생성합니다.
+func NewNaverAPIClient(config *configs.EnvConfig) *NaverAPIClient {
+	return &NaverAPIClient{
+		client: &http.Client{
+			Timeout: time.Second * 10, // 10초 타임아웃
+		},
+		config: config,
+	}
+}
+
+// SearchBlog는 네이버 블로그 검색 API를 호출하여 결과를 반환합니다.
+func (c *NaverAPIClient) SearchBlog(query string, display int, start int) (*structure.NaverSearchResponse, error) {
+	if c.config == nil {
+		return nil, fmt.Errorf("설정이 초기화되지 않았습니다")
+	}
+
+	searchURL := c.config.Naver.SearchURL
+	if searchURL == "" {
+		return nil, fmt.Errorf("검색 URL이 설정되지 않았습니다")
+	}
+
+	// URL 파라미터 추가
+	params := url.Values{}
+	params.Add("query", query)
+	params.Add("display", fmt.Sprintf("%d", display))
+	params.Add("start", fmt.Sprintf("%d", start))
+	params.Add("sort", "sim") // 정확도순 정렬
+
+	// 요청 URL 생성
+	reqURL := searchURL + "?" + params.Encode()
+
+	// HTTP 요청 생성
+	req, err := http.NewRequest("GET", reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("요청 생성 실패: %v", err)
+	}
+
+	// API 인증 헤더 추가
+	req.Header.Add("X-Naver-Client-Id", c.config.Naver.ClientID)
+	req.Header.Add("X-Naver-Client-Secret", c.config.Naver.ClientSecret)
+
+	// 요청 실행
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("요청 실행 실패: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// 응답 본문 읽기
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("응답 읽기 실패: %v", err)
+	}
+
+	// 응답 상태 확인
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API 오류 (%d): %s", resp.StatusCode, string(body))
+	}
+
+	// 응답 JSON 파싱
+	var searchResp structure.NaverSearchResponse
+	if err := json.Unmarshal(body, &searchResp); err != nil {
+		return nil, fmt.Errorf("응답 파싱 실패: %v", err)
+	}
+
+	return &searchResp, nil
+}
