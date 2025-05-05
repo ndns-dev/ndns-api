@@ -24,6 +24,6 @@ func main() {
 	routes.SetupRoutes(app)
 
 	port := configs.GetConfig().Server.Port
-	log.Printf("서버 시작: http://localhost%s ::::::", port)
-	log.Fatal(app.Listen(port))
+
+	log.Fatal(app.Listen(":" + port))
 }
