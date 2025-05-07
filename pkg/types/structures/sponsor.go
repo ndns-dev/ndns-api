@@ -2,7 +2,7 @@ package structure
 
 type SponsorIndicator struct {
 	Type        IndicatorType `json:"type"`
-	Pattern     string        `json:"pattern"`
+	Pattern     PatternType   `json:"pattern"`
 	MatchedText string        `json:"matchedText"`
 	Probability float64       `json:"probability"`
 	Source      SponsorSource `json:"source"`
