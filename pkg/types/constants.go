@@ -4,6 +4,10 @@ package constants
 var STICKER_DOMAINS = []string{
 	"storep-phinf.pstatic.net",
 	"post-phinf.pstatic.net",
+}
+
+// 협찬 업체 도메인 패턴
+var SPONSOR_DOMAINS = []string{
 	"cometoplay.kr",
 	"reviewnote.co.kr",
 }
