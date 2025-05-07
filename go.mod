@@ -10,7 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.19.0
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.43.1
 	github.com/gofiber/fiber/v2 v2.52.6
-	github.com/otiai10/gosseract/v2 v2.4.1
+	github.com/google/uuid v1.6.0
 	github.com/spf13/viper v1.20.1
 )
 
@@ -31,7 +31,6 @@ require (
 	github.com/aws/smithy-go v1.22.2 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
