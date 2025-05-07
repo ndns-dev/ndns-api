@@ -47,15 +47,15 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 				SponsorIndicators:  []structure.SponsorIndicator{},
 			}
 
-			// 텍스트 탐지 수행
-			isSponsored, probability, indicators := DetectSponsor(item.Description)
+			// 1. Description 텍스트 탐지 수행
+			isSponsored, probability, indicators := DetectSponsor(item.Description, structure.SponsorTypeDescription)
 
 			if isSponsored {
 				blogPost.IsSponsored = isSponsored
 				blogPost.SponsorProbability = probability
 				blogPost.SponsorIndicators = indicators
 			} else {
-				// Description에서 스폰서 탐지 실패시 본문 크롤링
+				// 2. Description에서 스폰서 탐지 실패시 본문 크롤링
 				crawlResult, err := crawler.CrawlBlogPost(item.Link)
 				fmt.Printf("crawlResult: %v\n", crawlResult)
 				fmt.Printf("crawlResult.FirstParagraph: %v\n", crawlResult.FirstParagraph)
@@ -64,32 +64,32 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 				if err != nil {
 					fmt.Printf("%s", err.Error())
 				}
-				isSponsored, probability, indicators = DetectSponsor(crawlResult.FirstParagraph)
+				isSponsored, probability, indicators = DetectSponsor(crawlResult.FirstParagraph, structure.SponsorTypeFirstParagraph)
 				fmt.Printf("FirstParagraph isSponsored1: %t\n", isSponsored)
 				if isSponsored {
 					blogPost.IsSponsored = isSponsored
 					blogPost.SponsorProbability = probability
 					blogPost.SponsorIndicators = indicators
 				} else {
-					// 크롤링한 본문에서 스폰서 탐지 실패시 스티커 이미지 ocr
+					// 3. 크롤링한 본문에서 스폰서 탐지 실패시 스티커 이미지 ocr
 					ocrText, err := ocrExtractor(crawlResult.StickerURL)
 					if err != nil {
 						fmt.Printf("%s", err.Error())
 					}
 					fmt.Printf("ocrText: %s\n", ocrText)
-					isSponsored, probability, indicators = DetectSponsor(ocrText)
+					isSponsored, probability, indicators = DetectSponsor(ocrText, structure.SponsorTypeSticker)
 					fmt.Printf("ImageURL isSponsored2: %t\n", isSponsored)
 					if isSponsored {
 						blogPost.IsSponsored = isSponsored
 						blogPost.SponsorProbability = probability
 						blogPost.SponsorIndicators = indicators
 					} else {
-						// 크롤링한 본문에서 스폰서 탐지 실패시 일반 이미지 ocr
+						// 4. 크롤링한 본문에서 스폰서 탐지 실패시 일반 이미지 ocr
 						ocrText, err := ocrExtractor(crawlResult.ImageURL)
 						if err != nil {
 							fmt.Printf("%s", err.Error())
 						}
-						isSponsored, probability, indicators = DetectSponsor(ocrText)
+						isSponsored, probability, indicators = DetectSponsor(ocrText, structure.SponsorTypeImage)
 						fmt.Printf("StickerURL isSponsored3: %t\n", isSponsored)
 						if isSponsored {
 							blogPost.IsSponsored = isSponsored
@@ -129,11 +129,11 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 }
 
 // DetectSponsor는 텍스트에서 스폰서 여부를 감지합니다
-func DetectSponsor(text string) (bool, float64, []structure.SponsorIndicator) {
+func DetectSponsor(text string, sourceType structure.SponsorType) (bool, float64, []structure.SponsorIndicator) {
 	var indicators []structure.SponsorIndicator
 	maxProbability := 0.0
 	isSponsored := false
-	fmt.Printf("text1111111: %v\n", text)
+	text = strings.ReplaceAll(text, " ", "")
 	// SPECIAL_CASE_PATTERNS 패턴 확인
 	for patternName, pattern := range structure.SPECIAL_CASE_PATTERNS {
 		// terms1과 terms2 모두 포함하는지 확인
@@ -164,6 +164,10 @@ func DetectSponsor(text string) (bool, float64, []structure.SponsorIndicator) {
 				Pattern:     patternName,
 				MatchedText: fmt.Sprintf("%s + %s", term1Match, term2Match),
 				Probability: 0.9, // 90% 확률
+				Source: structure.SponsorSource{
+					SponsorType: sourceType,
+					Text:        fmt.Sprintf("%s + %s", term1Match, term2Match),
+				},
 			}
 
 			indicators = append(indicators, indicator)
@@ -177,12 +181,16 @@ func DetectSponsor(text string) (bool, float64, []structure.SponsorIndicator) {
 
 	// 정확한 스폰서 키워드 확인
 	for _, exactKeyword := range structure.EXACT_SPONSOR_KEYWORDS_PATTERNS {
-		if strings.Contains(text, strings.ToLower(exactKeyword)) {
+		if strings.Contains(text, exactKeyword) {
 			indicator := structure.SponsorIndicator{
 				Type:        structure.IndicatorTypeExactKeywordRegex,
 				Pattern:     exactKeyword,
-				MatchedText: exactKeyword,
+				MatchedText: text,
 				Probability: 0.9, // 90% 확률
+				Source: structure.SponsorSource{
+					SponsorType: sourceType,
+					Text:        text,
+				},
 			}
 
 			indicators = append(indicators, indicator)
@@ -196,15 +204,19 @@ func DetectSponsor(text string) (bool, float64, []structure.SponsorIndicator) {
 
 	// 단일 키워드 패턴 확인 (가중치 합산)
 	for keyword, weight := range structure.SPONSOR_KEYWORDS {
-		if strings.Contains(text, strings.ToLower(keyword)) {
+		if strings.Contains(text, keyword) {
 			if weight > maxProbability {
 				maxProbability = weight
 
 				indicator := structure.SponsorIndicator{
 					Type:        structure.IndicatorTypeKeyword,
 					Pattern:     keyword,
-					MatchedText: keyword,
+					MatchedText: text,
 					Probability: weight,
+					Source: structure.SponsorSource{
+						SponsorType: sourceType,
+						Text:        text,
+					},
 				}
 
 				// 지표 추가
