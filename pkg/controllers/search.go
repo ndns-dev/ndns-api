@@ -25,17 +25,23 @@ func Search(searchService _interface.SearchService, sponsorService _interface.Sp
 		fmt.Printf("limit: %d, offset: %d\n", limit, offset)
 
 		posts, err := searchService.SearchBlogPosts(req)
-		fmt.Printf("검색 결과: %+v\n", posts)
+
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": "검색 중 오류 발생: " + err.Error(),
 			})
 		}
+		var SponsoredResults int
+		for _, post := range posts {
+			if post.IsSponsored {
+				SponsoredResults++
+			}
+		}
 
 		response := responseDto.Search{
 			Keyword:          req.Query,
 			TotalResults:     len(posts),
-			SponsoredResults: 0,
+			SponsoredResults: SponsoredResults,
 			Page:             offset/limit + 1,
 			ItemsPerPage:     limit,
 			Posts:            posts,
