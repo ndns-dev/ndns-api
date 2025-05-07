@@ -264,7 +264,45 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 		contentArea = doc.Selection
 	}
 
-	// 1. 스마트에디터 이미지 리소스 확인 (스티커가 아닌 이미지만)
+	// 0. 인라인 이미지 및 data-linkdata 속성 확인 (협찬 이미지에 특히 중요)
+	contentArea.Find(".se-inline-image, .se-module-image").Each(func(i int, imgContainer *goquery.Selection) {
+		if result.ImageURL != "" {
+			return
+		}
+
+		// data-linkdata 속성 확인 (JSON 데이터로 이미지 URL 포함)
+		linkElem := imgContainer.Find("a[data-linkdata], [data-linkdata]").First()
+		if linkElem.Length() > 0 {
+			linkData := linkElem.AttrOr("data-linkdata", "")
+			if linkData != "" {
+				var data map[string]interface{}
+				err := json.Unmarshal([]byte(linkData), &data)
+				if err == nil && data["src"] != nil {
+					imgURL := data["src"].(string)
+					result.ImageURL = imgURL
+					return
+				}
+			}
+		}
+
+		// 직접 이미지 태그 확인
+		img := imgContainer.Find("img").First()
+		if img.Length() > 0 {
+			imgURL := img.AttrOr("src", "")
+			if imgURL != "" {
+				fmt.Printf("인라인 이미지 태그에서 발견: %s\n", imgURL)
+				result.ImageURL = imgURL
+				return
+			}
+		}
+	})
+
+	// 이미지를 이미 찾았으면 다른 방법은 시도하지 않음
+	if result.ImageURL != "" {
+		return
+	}
+
+	// 1. 스마트에디터 이미지 리소스 확인
 	contentArea.Find(".se-image-resource").Each(func(i int, img *goquery.Selection) {
 		if result.ImageURL != "" {
 			return
@@ -276,12 +314,12 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 		}
 
 		imgURL := img.AttrOr("src", "")
-		if imgURL != "" && !containsStickerDomain(imgURL) {
+		if imgURL != "" {
 			result.ImageURL = imgURL
 		}
 	})
 
-	// 2. se-component 이미지 확인 (스티커가 아닌 이미지만)
+	// 2. se-component 이미지 확인
 	if result.ImageURL == "" {
 		contentArea.Find(".se-component.se-image").Each(func(i int, component *goquery.Selection) {
 			if result.ImageURL != "" {
@@ -292,7 +330,7 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 			img := component.Find(".se-module-image .se-image-resource").First()
 			if img.Length() > 0 {
 				imgURL := img.AttrOr("src", "")
-				if imgURL != "" && !containsStickerDomain(imgURL) {
+				if imgURL != "" {
 					result.ImageURL = imgURL
 					return
 				}
@@ -307,16 +345,14 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 					err := json.Unmarshal([]byte(linkData), &data)
 					if err == nil && data["src"] != nil {
 						imgURL := data["src"].(string)
-						if !containsStickerDomain(imgURL) {
-							result.ImageURL = imgURL
-						}
+						result.ImageURL = imgURL
 					}
 				}
 			}
 		})
 	}
 
-	// 3. 일반 이미지 확인 (스티커가 아닌 이미지만)
+	// 3. 일반 이미지 확인
 	if result.ImageURL == "" {
 		contentArea.Find("img").Each(func(i int, img *goquery.Selection) {
 			if result.ImageURL != "" {
@@ -336,8 +372,7 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 				imgURL = img.AttrOr("data-lazy-src", "")
 			}
 
-			if imgURL != "" && !containsStickerDomain(imgURL) &&
-				(strings.HasPrefix(imgURL, "http://") || strings.HasPrefix(imgURL, "https://")) {
+			if imgURL != "" && (strings.HasPrefix(imgURL, "http://") || strings.HasPrefix(imgURL, "https://")) {
 				result.ImageURL = imgURL
 			}
 		})
@@ -570,16 +605,6 @@ func min(a, b int) int {
 		return a
 	}
 	return b
-}
-
-// containsStickerDomain은 URL이 스티커 도메인을 포함하는지 확인합니다
-func containsStickerDomain(url string) bool {
-	for _, domain := range constants.STICKER_DOMAINS {
-		if strings.Contains(url, domain) {
-			return true
-		}
-	}
-	return false
 }
 
 // parseTistoryBlog는 티스토리 블로그 HTML을 파싱합니다
