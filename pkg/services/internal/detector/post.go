@@ -6,12 +6,14 @@ import (
 	"sync"
 
 	_interface "github.com/sh5080/ndns-go/pkg/interfaces"
+	"github.com/sh5080/ndns-go/pkg/services/internal/analyzer"
 	"github.com/sh5080/ndns-go/pkg/services/internal/crawler"
+	constant "github.com/sh5080/ndns-go/pkg/types"
 	structure "github.com/sh5080/ndns-go/pkg/types/structures"
 )
 
-// DetectTextInPosts는 여러 포스트에서 동시에 스폰서 관련 텍스트를 탐지합니다
-func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interface.OCRFunc, ocrCache _interface.OCRCacheFunc) []structure.BlogPost {
+// DetectTextInPosts는 여러 포스트에서 동시에 협찬 관련 텍스트를 탐지합니다
+func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interface.OCRFunc, ocrCacheFunc _interface.OCRCacheFunc) []structure.BlogPost {
 	// 결과를 저장할 슬라이스 초기화
 	results := make([]structure.BlogPost, len(posts))
 
@@ -39,81 +41,99 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 				// 계속 진행
 			}
 
-			// 블로그 포스트 초기화
-			blogPost := structure.BlogPost{
-				NaverSearchItem:    item,
-				IsSponsored:        false,
-				SponsorProbability: 0,
-				SponsorIndicators:  []structure.SponsorIndicator{},
-			}
+			// 블로그 포스트 초기화 (analyzer 패키지 사용)
+			blogPost := analyzer.CreateBlogPost(item)
 
 			// 1. Description 텍스트 탐지 수행
 			isSponsored, probability, indicators := DetectSponsor(item.Description, structure.SponsorTypeDescription)
 
 			if isSponsored {
-				blogPost.IsSponsored = isSponsored
-				blogPost.SponsorProbability = probability
-				blogPost.SponsorIndicators = indicators
+				//협찬 정보 업데이트
+				analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
 			} else {
-				// 2. Description에서 스폰서 탐지 실패시 본문 크롤링
+				// 2. Description에서 협찬 탐지 실패시 본문 크롤링
 				crawlResult, err := crawler.CrawlBlogPost(item.Link)
 				if err != nil {
 					fmt.Printf("%s", err.Error())
 				}
+
+				// 2-1. 협찬 도메인 확인 (이미지 URL과 스티커 URL 모두 확인)
+				foundSponsorDomain := false
+				var foundURL, domain string
+				sponsorType := structure.SponsorTypeImage
+
+				// 이미지 URL 확인
+				if foundDomain, matchedDomain := analyzer.CheckSponsorDomain(crawlResult.ImageURL, constant.SPONSOR_DOMAINS); foundDomain {
+					foundSponsorDomain = true
+					foundURL = crawlResult.ImageURL
+					sponsorType = structure.SponsorTypeImage
+					domain = matchedDomain
+				}
+
+				// 스티커 URL 확인 (이미지 URL에서 발견되지 않은 경우)
+				if !foundSponsorDomain {
+					if foundDomain, matchedDomain := analyzer.CheckSponsorDomain(crawlResult.StickerURL, constant.SPONSOR_DOMAINS); foundDomain {
+						foundSponsorDomain = true
+						foundURL = crawlResult.StickerURL
+						sponsorType = structure.SponsorTypeSticker
+						domain = matchedDomain
+					}
+				}
+
+				// 협찬 도메인이 발견된 경우
+				if foundSponsorDomain {
+					// analyzer 패키지 함수 사용
+					blogPost = analyzer.CreateSponsoredBlogPost(
+						item,
+						1.0,
+						foundURL,
+						structure.IndicatorTypeKeyword,
+						structure.PatternTypeNormal,
+						sponsorType,
+						domain,
+					)
+
+					// 결과 저장 및 다른 고루틴에게 알림 (공통 함수 사용)
+					analyzer.NotifyAndSaveResult(&mu, doneCh, results, index, blogPost, 0.9)
+					return
+				}
+
+				// 본문 분석
 				isSponsored, probability, indicators = DetectSponsor(crawlResult.FirstParagraph, structure.SponsorTypeFirstParagraph)
 				if isSponsored {
-					blogPost.IsSponsored = isSponsored
-					blogPost.SponsorProbability = probability
-					blogPost.SponsorIndicators = indicators
+					//협찬 정보 업데이트
+					analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
 				} else {
+					// 3. 스티커 이미지 OCR 처리
 					if crawlResult.StickerURL != "" {
-						// 3. 크롤링한 본문에서 스폰서 탐지 실패시 스티커 이미지 OCR
 						ocrText, err := ocrExtractor(crawlResult.StickerURL)
 						if err != nil {
 							fmt.Printf("%s", err.Error())
 						}
 						isSponsored, probability, indicators = DetectSponsor(ocrText, structure.SponsorTypeSticker)
 						if isSponsored {
-							blogPost.IsSponsored = isSponsored
-							blogPost.SponsorProbability = probability
-							blogPost.SponsorIndicators = indicators
+							//협찬 정보 업데이트
+							analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
 						}
 					}
 
-					// 4. 스티커 URL이 없거나 스폰서 탐지 실패시 일반 이미지 OCR
-					if crawlResult.ImageURL != "" {
+					// 4. 일반 이미지 OCR 처리
+					if !blogPost.IsSponsored && crawlResult.ImageURL != "" {
 						ocrText, err := ocrExtractor(crawlResult.ImageURL)
 						if err != nil {
 							fmt.Printf("%s", err.Error())
 						}
 						isSponsored, probability, indicators = DetectSponsor(ocrText, structure.SponsorTypeImage)
 						if isSponsored {
-							blogPost.IsSponsored = isSponsored
-							blogPost.SponsorProbability = probability
-							blogPost.SponsorIndicators = indicators
+							//협찬 정보 업데이트
+							analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
 						}
 					}
 				}
 			}
 
-			// 확률이 90% 이상이면 확실한 스폰서로 판단하고 다른 고루틴에게 알림
-			if isSponsored && probability >= 0.9 {
-				// 뮤텍스로 경쟁 상태 방지
-				mu.Lock()
-				select {
-				case <-doneCh:
-					// 이미 닫힌 경우 무시
-				default:
-					// 채널을 닫아 다른 고루틴에게 알림
-					close(doneCh)
-				}
-				mu.Unlock()
-			}
-
-			// 결과 저장
-			mu.Lock()
-			results[index] = blogPost
-			mu.Unlock()
+			// 결과 저장 및 알림 (공통 함수 사용)
+			analyzer.NotifyAndSaveResult(&mu, doneCh, results, index, blogPost, 0.9)
 		}(i, post)
 	}
 
@@ -123,7 +143,7 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 	return results
 }
 
-// DetectSponsor는 텍스트에서 스폰서 여부를 감지합니다
+// DetectSponsor는 텍스트에서 협찬 여부를 감지합니다
 func DetectSponsor(text string, sourceType structure.SponsorType) (bool, float64, []structure.SponsorIndicator) {
 	var indicators []structure.SponsorIndicator
 	maxProbability := 0.0
@@ -170,7 +190,7 @@ func DetectSponsor(text string, sourceType structure.SponsorType) (bool, float64
 		}
 	}
 
-	// 2. 정확한 스폰서 키워드 확인
+	// 2. 정확한 협찬 키워드 확인
 	for _, exactKeyword := range structure.EXACT_SPONSOR_KEYWORDS_PATTERNS {
 		if strings.Contains(text, exactKeyword) {
 			indicator := structure.SponsorIndicator{
@@ -224,7 +244,7 @@ func DetectSponsor(text string, sourceType structure.SponsorType) (bool, float64
 	return isSponsored, maxProbability, indicators
 }
 
-// detectText는 텍스트에서 스폰서 여부를 탐지합니다
+// detectText는 텍스트에서 협찬 여부를 탐지합니다
 func detectText(text string) (*structure.SponsorIndicator, float64) {
 	// SPECIAL_CASE_PATTERNS 패턴 확인
 	for _, pattern := range structure.SPECIAL_CASE_PATTERNS {
@@ -258,7 +278,7 @@ func detectText(text string) (*structure.SponsorIndicator, float64) {
 		}
 	}
 
-	// 정확한 스폰서 키워드 확인
+	// 정확한 협찬 키워드 확인
 	for _, exactKeyword := range structure.EXACT_SPONSOR_KEYWORDS_PATTERNS {
 		if strings.Contains(text, exactKeyword) {
 			return &structure.SponsorIndicator{
@@ -296,7 +316,7 @@ func detectText(text string) (*structure.SponsorIndicator, float64) {
 	return nil, 0
 }
 
-// DetectTextAsync는 비동기로 텍스트에서 스폰서 여부를 탐지합니다 (채널 기반)
+// DetectTextAsync는 비동기로 텍스트에서 협찬 여부를 탐지합니다 (채널 기반)
 func DetectTextAsync(texts []string) <-chan SponsorDetectionResult {
 	resultCh := make(chan SponsorDetectionResult)
 
@@ -337,7 +357,7 @@ func DetectTextAsync(texts []string) <-chan SponsorDetectionResult {
 	return resultCh
 }
 
-// SponsorDetectionResult는 스폰서 감지 결과를 나타냅니다
+// SponsorDetectionResult는 협찬 감지 결과를 나타냅니다
 type SponsorDetectionResult struct {
 	Index       int
 	Indicator   *structure.SponsorIndicator

@@ -1,6 +1,9 @@
 package analyzer
 
 import (
+	"strings"
+	"sync"
+
 	structure "github.com/sh5080/ndns-go/pkg/types/structures"
 )
 
@@ -24,7 +27,7 @@ func CreateSponsoredBlogPost(
 	sponsorType structure.SponsorType,
 	sourceText string,
 ) structure.BlogPost {
-	// 스폰서 표시자 생성
+	// 협찬 표시자 생성
 	indicator := structure.SponsorIndicator{
 		Type:        indicatorType,
 		Pattern:     patternType,
@@ -45,7 +48,7 @@ func CreateSponsoredBlogPost(
 	}
 }
 
-// AddIndicator는 블로그 포스트에 스폰서 표시자를 추가합니다
+// AddIndicator는 블로그 포스트에 협찬 표시자를 추가합니다
 func AddIndicator(
 	post *structure.BlogPost,
 	indicatorType structure.IndicatorType,
@@ -55,7 +58,7 @@ func AddIndicator(
 	sponsorType structure.SponsorType,
 	sourceText string,
 ) {
-	// 새 스폰서 표시자 생성
+	// 새 협찬 표시자 생성
 	indicator := structure.SponsorIndicator{
 		Type:        indicatorType,
 		Pattern:     patternType,
@@ -81,7 +84,7 @@ func AddIndicator(
 	}
 }
 
-// CreateSponsorIndicator는 스폰서 표시자를 생성합니다
+// CreateSponsorIndicator는 협찬 표시자를 생성합니다
 func CreateSponsorIndicator(
 	indicatorType structure.IndicatorType,
 	patternType structure.PatternType,
@@ -100,4 +103,63 @@ func CreateSponsorIndicator(
 			Text:        sourceText,
 		},
 	}
+}
+
+// UpdateBlogPostWithSponsorInfo는 협찬 감지 결과를 블로그 포스트에 업데이트합니다
+func UpdateBlogPostWithSponsorInfo(
+	blogPost *structure.BlogPost,
+	isSponsored bool,
+	probability float64,
+	indicators []structure.SponsorIndicator,
+) {
+	if !isSponsored {
+		return
+	}
+
+	blogPost.IsSponsored = isSponsored
+	blogPost.SponsorProbability = probability
+	blogPost.SponsorIndicators = indicators
+}
+
+// NotifyAndSaveResult는 높은 확률의 협찬 발견 시 알림 및 결과 저장을 처리합니다
+func NotifyAndSaveResult(
+	mu *sync.Mutex,
+	doneCh chan struct{},
+	results []structure.BlogPost,
+	index int,
+	blogPost structure.BlogPost,
+	notifyThreshold float64,
+) {
+	// 뮤텍스로 경쟁 상태 방지
+	mu.Lock()
+	defer mu.Unlock()
+
+	// 결과 저장
+	results[index] = blogPost
+
+	// 확률이 임계값 이상이면 다른 고루틴에게 알림
+	if blogPost.IsSponsored && blogPost.SponsorProbability >= notifyThreshold {
+		select {
+		case <-doneCh:
+			// 이미 닫힌 경우 무시
+		default:
+			// 채널을 닫아 다른 고루틴에게 알림
+			close(doneCh)
+		}
+	}
+}
+
+// 이미지 URL에서 협찬 도메인을 확인하는 함수
+func CheckSponsorDomain(url string, domains []string) (bool, string) {
+	if url == "" {
+		return false, ""
+	}
+
+	for _, domain := range domains {
+		if strings.Contains(url, domain) {
+			return true, domain
+		}
+	}
+
+	return false, ""
 }
