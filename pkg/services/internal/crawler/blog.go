@@ -150,19 +150,12 @@ func extractNaverIframeURL(doc *goquery.Document, originalURL string) string {
 
 // parseNaverBlog는 네이버 블로그 HTML을 파싱합니다
 func parseNaverBlog(doc *goquery.Document, result *structure.CrawlResult) {
-	fmt.Printf("네이버 블로그 파싱 시작\n")
-	fmt.Printf("네이버 스티커 파싱 시작\n")
 	// 스티커 이미지 추출
 	extractFirstSticker(doc, result)
-	fmt.Printf("네이버 스티커 파싱 완료\n")
-	fmt.Printf("네이버 이미지 파싱 시작\n")
 	// 일반 이미지 추출
 	extractFirstImage(doc, result)
-	fmt.Printf("네이버 이미지 파싱 완료\n")
-	fmt.Printf("네이버 문단 파싱 시작\n")
 	// 첫 문단 추출
 	extractFirstParagraph(doc, result)
-	fmt.Printf("네이버 문단 파싱 완료\n")
 }
 
 // extractFirstSticker는 첫 번째 스티커를 추출합니다
@@ -363,12 +356,8 @@ func extractFirstParagraph(doc *goquery.Document, result *structure.CrawlResult)
 	for _, selector := range constants.CONTENT_SELECTORS {
 		selected := doc.Find(selector)
 		count := selected.Length()
-		fmt.Printf("선택자 '%s' 결과: %d개 요소 발견\n", selector, count)
 
 		if count > 0 {
-			html, _ := selected.First().Html()
-			fmt.Printf("선택자 '%s' 첫 번째 요소 HTML (%d 바이트): %s...\n", selector, len(html), html[:100])
-
 			contentArea = selected.First()
 			break
 		}
@@ -392,7 +381,6 @@ func extractFirstParagraph(doc *goquery.Document, result *structure.CrawlResult)
 
 	for _, selector := range quotationSelectors {
 		quotes := contentArea.Find(selector)
-		fmt.Printf("인용구 선택자 '%s' 결과: %d개 요소 발견\n", selector, quotes.Length())
 
 		if quotes.Length() > 0 {
 			quotes.EachWithBreak(func(i int, quote *goquery.Selection) bool {
@@ -425,12 +413,6 @@ func extractFirstParagraph(doc *goquery.Document, result *structure.CrawlResult)
 				// 텍스트 정리 (특수문자 제거)
 				text = cleanText(text)
 
-				if len(text) > 100 {
-					fmt.Printf("인용구 %d 확인 (%d 바이트): %s...\n", i+1, len(text), text[:100])
-				} else {
-					fmt.Printf("인용구 %d 확인: %s\n", i+1, text)
-				}
-
 				if text != "" && len(text) > 5 {
 					quotationText = text
 					quotationFound = true
@@ -462,10 +444,8 @@ func extractFirstParagraph(doc *goquery.Document, result *structure.CrawlResult)
 	paragraphFound := false
 
 	for _, selector := range paragraphSelectors {
-		fmt.Printf("문단 선택자 '%s' 검색 중...\n", selector)
 		paragraphElements := contentArea.Find(selector)
 		paragraphCount := paragraphElements.Length()
-		fmt.Printf("문단 선택자 '%s' 결과: %d개 요소 발견\n", selector, paragraphCount)
 
 		if paragraphCount > 0 {
 			paragraphElements.EachWithBreak(func(i int, p *goquery.Selection) bool {
@@ -491,12 +471,6 @@ func extractFirstParagraph(doc *goquery.Document, result *structure.CrawlResult)
 
 				// 텍스트 정리 (특수문자 제거)
 				text = cleanText(text)
-
-				if len(text) > 100 {
-					fmt.Printf("문단 %d 내용 (%d 바이트): '%s...'\n", i+1, len(text), text[:100])
-				} else {
-					fmt.Printf("문단 %d 내용: '%s'\n", i+1, text)
-				}
 
 				if text != "" && len(text) > 5 && text != "" {
 					firstParagraph = text
@@ -527,7 +501,7 @@ func extractFirstParagraph(doc *goquery.Document, result *structure.CrawlResult)
 			var texts []string
 			div.Find("span").Each(func(j int, span *goquery.Selection) {
 				spanText := strings.TrimSpace(span.Text())
-				if spanText != "" && spanText != "" && len(spanText) > 5 {
+				if spanText != "" && len(spanText) > 5 {
 					texts = append(texts, spanText)
 				}
 			})
