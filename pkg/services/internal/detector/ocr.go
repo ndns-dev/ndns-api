@@ -159,7 +159,7 @@ func (o *OCRImpl) runOCR(imagePath string) (string, error) {
 
 	// 결과가 없으면 다른 psm 모드 시도
 	if textDetected == "" || strings.Contains(textDetected, "Estimating") {
-		fmt.Printf("OCR 결과 여전히 미흡, 세 번째 시도 (다른 PSM 모드)\n")
+		fmt.Printf("OCR 결과 여전히 미흡, 다른 PSM 모드 시도\n")
 
 		psm_modes := []string{"7", "8", "10", "11", "12"}
 
