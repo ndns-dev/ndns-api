@@ -49,11 +49,6 @@ func (o *OCRImpl) ExtractTextFromImage(imageURL string) (string, error) {
 		}
 	}
 
-	// Tesseract 설치 확인
-	if !o.isTesseractInstalled() {
-		return "", fmt.Errorf("tesseract OCR이 설치되지 않았습니다")
-	}
-
 	// 이미지 다운로드
 	tempFile, err := o.downloadImage(imageURL)
 	if err != nil {
@@ -64,9 +59,10 @@ func (o *OCRImpl) ExtractTextFromImage(imageURL string) (string, error) {
 	// OCR 실행
 	textDetected, err := o.runOCR(tempFile)
 	if err != nil {
+		fmt.Printf("OCR 실행 실패: %v, 파일 경로: %s\n", err, tempFile)
 		return "", fmt.Errorf("OCR 실행 실패: %v", err)
 	}
-	fmt.Printf("textDetected: %v\n", textDetected)
+
 	// OCR 결과 캐싱
 	if o.ocrRepo != nil && textDetected != "" {
 		// 비동기 저장 (결과에 영향 없음)
@@ -110,7 +106,9 @@ func (o *OCRImpl) downloadImage(imageURL string) (string, error) {
 
 	// 임시 파일 생성
 	tempDir := os.TempDir()
-	tempFileName := uuid.New().String() + ".jpg"
+	// 원본 이미지 URL에서 확장자 추출
+	ext := filepath.Ext(strings.Split(imageURL, "?")[0])
+	tempFileName := uuid.New().String() + ext
 	tempFilePath := filepath.Join(tempDir, tempFileName)
 
 	// 이미지 파일 저장
@@ -134,9 +132,16 @@ func (o *OCRImpl) runOCR(imagePath string) (string, error) {
 	// OCR 디버깅용
 	fmt.Printf("OCR 실행 - 이미지 경로: %s\n", imagePath)
 
-	// 첫 번째 시도: 파이썬 코드와 동일한 설정으로 실행
-	// lang="kor", config="--psm 6 --oem 3 -c preserve_interword_spaces=1"
-	cmd := exec.Command("tesseract",
+	// 이미지 정보 확인
+	cmd := exec.Command("identify", "-format", "%w %h", imagePath)
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		dimensions := strings.TrimSpace(string(output))
+		fmt.Printf("이미지 크기: %s\n", dimensions)
+	}
+
+	// 기본 시도
+	cmd = exec.Command("tesseract",
 		imagePath,
 		"stdout",
 		"-l", "kor",
@@ -144,74 +149,43 @@ func (o *OCRImpl) runOCR(imagePath string) (string, error) {
 		"--oem", "3",
 		"-c", "preserve_interword_spaces=1")
 
-	output, err := cmd.CombinedOutput()
+	output, err = cmd.CombinedOutput()
 	if err != nil {
 		fmt.Printf("OCR 실행 실패: %v\n", err)
-		// 에러가 있어도, 출력 내용은 확인
 	}
 
 	// OCR 결과 정리
 	textDetected := strings.TrimSpace(string(output))
 
-	// 결과가 없거나 디버그 메시지만 있는 경우
+	// 결과가 없으면 다른 psm 모드 시도
 	if textDetected == "" || strings.Contains(textDetected, "Estimating") {
-		fmt.Printf("OCR 결과 미흡, 두 번째 시도\n")
+		fmt.Printf("OCR 결과 여전히 미흡, 세 번째 시도 (다른 PSM 모드)\n")
 
-		// 두 번째 시도: 간단한 설정으로 재시도
-		cmdAlt := exec.Command("tesseract",
-			imagePath,
-			"stdout",
-			"-l", "kor")
+		psm_modes := []string{"7", "8", "10", "11", "12"}
 
-		outputAlt, err := cmdAlt.CombinedOutput()
-		if err != nil {
-			fmt.Printf("두 번째 OCR 시도 실패: %v\n", err)
-			// 첫 번째 결과라도 반환
-		} else {
+		for _, psm := range psm_modes {
+			cmdAlt := exec.Command("tesseract",
+				imagePath,
+				"stdout",
+				"-l", "kor",
+				"--psm", psm)
+
+			outputAlt, _ := cmdAlt.CombinedOutput()
 			altText := strings.TrimSpace(string(outputAlt))
+
 			if altText != "" && !strings.Contains(altText, "Estimating") {
 				textDetected = altText
+				fmt.Printf("PSM %s에서 텍스트 감지됨\n", psm)
+				break
 			}
 		}
 	}
 
-	// 결과 확인 및 길이 출력
-	if textDetected == "" {
-		fmt.Printf("OCR 결과: 추출된 텍스트 없음\n")
-	} else {
-		// 출력 준비
-		previewLen := 50
-		if len(textDetected) < previewLen {
-			previewLen = len(textDetected)
-		}
-
-		preview := textDetected[:previewLen]
-		suffix := ""
-		if len(textDetected) > previewLen {
-			suffix = "..."
-		}
-
-		fmt.Printf("OCR 결과 (%d 바이트): %s%s\n", len(textDetected), preview, suffix)
-	}
-
 	// 디버그 메시지만 있고 실제 텍스트가 없는 경우
-	if strings.Contains(textDetected, "Estimating") && len(textDetected) < 100 {
-		return "", nil
+	if textDetected == "" || (strings.Contains(textDetected, "Estimating") && len(textDetected) < 100) {
+		// 빈 문자열 대신 기본값 반환
+		return "[OCR 인식 불가: 이미지에서 텍스트 추출 실패]", nil
 	}
 
 	return textDetected, nil
-}
-
-// min은 두 정수 중 작은 값을 반환합니다
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-// isTesseractInstalled는 Tesseract OCR이 설치되어 있는지 확인합니다
-func (o *OCRImpl) isTesseractInstalled() bool {
-	_, err := exec.LookPath("tesseract")
-	return err == nil
 }
