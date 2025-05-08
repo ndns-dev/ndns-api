@@ -31,11 +31,6 @@ type EnvConfig struct {
 		TesseractPath string `mapstructure:"OCR_TESSERACT_PATH"`
 		TempDir       string `mapstructure:"OCR_TEMP_DIR"`
 	}
-	Weight struct {
-		ExactSponsorKeywords float64 `mapstructure:"WEIGHT_EXACT_SPONSOR_KEYWORDS"`
-		SponsorKeywords      float64 `mapstructure:"WEIGHT_SPONSOR_KEYWORDS"`
-		LowSponsorKeywords   float64 `mapstructure:"WEIGHT_LOW_SPONSOR_KEYWORDS"`
-	}
 }
 
 var (
@@ -76,9 +71,6 @@ func loadConfig() *EnvConfig {
 	viper.SetDefault("NAVER_SEARCH_URL", "https://openapi.naver.com/v1/search/blog.json")
 	viper.SetDefault("OCR_TESSERACT_PATH", "/usr/local/bin/tesseract")
 	viper.SetDefault("OCR_TEMP_DIR", "/tmp")
-	viper.SetDefault("WEIGHT_EXACT_SPONSOR_KEYWORDS", 0.9)
-	viper.SetDefault("WEIGHT_SPONSOR_KEYWORDS", 0.7)
-	viper.SetDefault("WEIGHT_LOW_SPONSOR_KEYWORDS", 0.5)
 
 	// 환경 변수 키-구조체 필드 매핑 정의
 	config := &EnvConfig{}
@@ -96,23 +88,11 @@ func loadConfig() *EnvConfig {
 		"OCR_TEMP_DIR":                 &config.OCR.TempDir,
 	}
 
-	// float64 타입 필드용 별도 매핑
-	envFloatMapping := map[string]*float64{
-		"WEIGHT_EXACT_SPONSOR_KEYWORDS": &config.Weight.ExactSponsorKeywords,
-		"WEIGHT_SPONSOR_KEYWORDS":       &config.Weight.SponsorKeywords,
-		"WEIGHT_LOW_SPONSOR_KEYWORDS":   &config.Weight.LowSponsorKeywords,
-	}
 	fmt.Println("환경 변수 로드 중...")
 	// 필드에 환경 변수 값 매핑 - 문자열 필드
 	for key, field := range envMapping {
 		*field = viper.GetString(key)
 		fmt.Printf("%s: '%s'\n", key, *field) // 디버깅용
-	}
-
-	// 필드에 환경 변수 값 매핑 - float64 필드
-	for key, field := range envFloatMapping {
-		*field = viper.GetFloat64(key)
-		fmt.Printf("%s: '%f'\n", key, *field) // 디버깅용
 	}
 
 	return config

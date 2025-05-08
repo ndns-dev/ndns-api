@@ -3,11 +3,8 @@ package analyzer
 import (
 	"sync"
 
-	"github.com/sh5080/ndns-go/pkg/configs"
 	structure "github.com/sh5080/ndns-go/pkg/types/structures"
 )
-
-var weightPreference = configs.GetConfig().Weight
 
 // Crawl은 크롤링한 값을 분석합니다
 func Crawl(posts []structure.BlogPost, ocrExtractor OCRFunc, ocrCache OCRCacheFunc) []structure.BlogPost {
@@ -18,7 +15,7 @@ func Crawl(posts []structure.BlogPost, ocrExtractor OCRFunc, ocrCache OCRCacheFu
 	// 이미 확실한 스폰서로 판단된 포스트가 있는지 확인
 	hasDefiniteSponsor := false
 	for _, post := range results {
-		if post.IsSponsored && post.SponsorProbability >= weightPreference.ExactSponsorKeywords {
+		if post.IsSponsored && post.SponsorProbability >= structure.Accuracy.Exact {
 			hasDefiniteSponsor = true
 			break
 		}
@@ -32,7 +29,7 @@ func Crawl(posts []structure.BlogPost, ocrExtractor OCRFunc, ocrCache OCRCacheFu
 
 		for i, post := range results {
 			// 이미 높은 확률의 스폰서로 판단된 경우 크롤링 건너뛰기
-			if post.IsSponsored && post.SponsorProbability >= weightPreference.SponsorKeywords {
+			if post.IsSponsored && post.SponsorProbability >= structure.Accuracy.Possible {
 				continue
 			}
 
