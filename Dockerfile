@@ -14,7 +14,7 @@ ARG BUILD_VERSION=dev
 RUN go mod tidy
 
 # Version 심볼 주입 (패키지 경로 정확히 명시)
-RUN go build -ldflags "-X 'github.com/sh5080/ndns-go/pkg/controllers.Version=${BUILD_VERSION}'" -o ndns-go ./pkg/main.go
+RUN go build -ldflags "-X 'github.com/sh5080/ndns-go/pkg/controller.Version=${BUILD_VERSION}'" -o ndns-go ./pkg/main.go
 
 # 런타임 스테이지
 FROM ubuntu:20.04
