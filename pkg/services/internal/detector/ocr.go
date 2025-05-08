@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -81,6 +82,24 @@ func (o *OCRImpl) downloadImage(imageURL string) (string, error) {
 	if !strings.HasPrefix(imageURL, "http://") && !strings.HasPrefix(imageURL, "https://") {
 		imageURL = "https://" + imageURL
 	}
+
+	// URL 인코딩: 한글 등 특수 문자가 포함된 경우 인코딩
+	parsedURL, err := url.Parse(imageURL)
+	if err != nil {
+		return "", fmt.Errorf("URL 파싱 오류: %v", err)
+	}
+
+	// 각 경로 세그먼트를 개별적으로 인코딩
+	pathSegments := strings.Split(parsedURL.Path, "/")
+	for i, segment := range pathSegments {
+		if segment != "" {
+			pathSegments[i] = url.PathEscape(segment)
+		}
+	}
+	parsedURL.Path = strings.Join(pathSegments, "/")
+
+	// 인코딩된 URL로 업데이트
+	imageURL = parsedURL.String()
 
 	// URL 최적화: 네이버 블로그 이미지 크기 조정
 	// ?type= 매개변수가 없는 경우 w773 크기 추가
