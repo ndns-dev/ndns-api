@@ -2,7 +2,6 @@ package analyzer
 
 import (
 	"strings"
-	"sync"
 
 	structure "github.com/sh5080/ndns-go/pkg/types/structures"
 )
@@ -119,34 +118,6 @@ func UpdateBlogPostWithSponsorInfo(
 	blogPost.IsSponsored = isSponsored
 	blogPost.SponsorProbability = probability
 	blogPost.SponsorIndicators = indicators
-}
-
-// NotifyAndSaveResult는 높은 확률의 협찬 발견 시 알림 및 결과 저장을 처리합니다
-func NotifyAndSaveResult(
-	mu *sync.Mutex,
-	doneCh chan struct{},
-	results []structure.BlogPost,
-	index int,
-	blogPost structure.BlogPost,
-	notifyThreshold float64,
-) {
-	// 뮤텍스로 경쟁 상태 방지
-	mu.Lock()
-	defer mu.Unlock()
-
-	// 결과 저장
-	results[index] = blogPost
-
-	// 확률이 임계값 이상이면 다른 고루틴에게 알림
-	if blogPost.IsSponsored && blogPost.SponsorProbability >= notifyThreshold {
-		select {
-		case <-doneCh:
-			// 이미 닫힌 경우 무시
-		default:
-			// 채널을 닫아 다른 고루틴에게 알림
-			close(doneCh)
-		}
-	}
 }
 
 // 이미지 URL에서 협찬 도메인을 확인하는 함수

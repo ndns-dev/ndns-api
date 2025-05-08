@@ -17,6 +17,11 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 	// 결과를 저장할 슬라이스 초기화
 	results := make([]structure.BlogPost, len(posts))
 
+	// 모든 결과 항목 미리 초기화
+	for i, post := range posts {
+		results[i] = analyzer.CreateBlogPost(post)
+	}
+
 	// 동시성 제어를 위한 WaitGroup
 	var wg sync.WaitGroup
 
@@ -43,18 +48,22 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 
 			// 블로그 포스트 초기화 (analyzer 패키지 사용)
 			blogPost := analyzer.CreateBlogPost(item)
+			fmt.Printf("[%d] 초기화된 blogPost: %s\n", index, blogPost.NaverSearchItem.Link)
 
 			// 1. Description 텍스트 탐지 수행
 			isSponsored, probability, indicators := DetectSponsor(item.Description, structure.SponsorTypeDescription)
 
 			if isSponsored {
-				//협찬 정보 업데이트
+				// 공통 함수 사용하여 스폰서 정보 업데이트
 				analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
+				fmt.Printf("[%d] 스폰서 감지 후 업데이트: %+v\n", index, blogPost.NaverSearchItem.Link)
 			} else {
-				// 2. Description에서 협찬 탐지 실패시 본문 크롤링
+				// 2. Description에서 스폰서 탐지 실패시 본문 크롤링
 				crawlResult, err := crawler.CrawlBlogPost(item.Link)
 				if err != nil {
-					fmt.Printf("%s", err.Error())
+					fmt.Printf("[%d] 크롤링 실패: %v\n", index, err)
+				} else {
+					fmt.Printf("[%d] 크롤링 성공: %s, 이미지: %s\n", index, item.Link, crawlResult.ImageURL)
 				}
 
 				// 2-1. 협찬 도메인 확인 (이미지 URL과 스티커 URL 모두 확인)
@@ -93,8 +102,24 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 						domain,
 					)
 
-					// 결과 저장 및 다른 고루틴에게 알림 (공통 함수 사용)
-					analyzer.NotifyAndSaveResult(&mu, doneCh, results, index, blogPost, 0.9)
+					// 결과 저장 및 다른 고루틴에게 알림
+					fmt.Printf("[%d] 저장 직전 blogPost: Link=%s, IsSponsored=%v\n",
+						index, blogPost.NaverSearchItem.Link, blogPost.IsSponsored)
+					// 결과 저장
+					mu.Lock()
+					results[index] = blogPost
+					mu.Unlock()
+
+					// 높은 확률의 스폰서가 발견되면 다른 고루틴에게 알림
+					if blogPost.IsSponsored && blogPost.SponsorProbability >= 0.9 {
+						select {
+						case <-doneCh:
+							// 이미 채널이 닫혀있으면 무시
+						default:
+							// 채널 닫기 (다른 고루틴에게 신호)
+							close(doneCh)
+						}
+					}
 					return
 				}
 
@@ -132,8 +157,22 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 				}
 			}
 
-			// 결과 저장 및 알림 (공통 함수 사용)
-			analyzer.NotifyAndSaveResult(&mu, doneCh, results, index, blogPost, 0.9)
+			// fmt.Printf("blogPost: %+v\n", blogPost)
+			// 결과 저장
+			mu.Lock()
+			results[index] = blogPost
+			mu.Unlock()
+
+			// 높은 확률의 스폰서가 발견되면 다른 고루틴에게 알림
+			if blogPost.IsSponsored && blogPost.SponsorProbability >= 0.9 {
+				select {
+				case <-doneCh:
+					// 이미 채널이 닫혀있으면 무시
+				default:
+					// 채널 닫기 (다른 고루틴에게 신호)
+					close(doneCh)
+				}
+			}
 		}(i, post)
 	}
 
