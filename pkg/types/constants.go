@@ -11,6 +11,7 @@ var SPONSOR_DOMAINS = []string{
 	"cometoplay.kr",
 	"reviewnote.co.kr",
 	"xn--939au0g4vj8sq.net",
+	"revu.net",
 }
 
 // 네이버 이미지 패턴
