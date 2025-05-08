@@ -18,7 +18,6 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_SSH_PORT }}
           script: |
-            cd /home/ubuntu/ndns-go
             docker pull ${{ secrets.DOCKER_USERNAME }}/ndns-go:latest
             chmod +x deploy/deploy.sh
             ./deploy/deploy.sh
