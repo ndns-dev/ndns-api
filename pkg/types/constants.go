@@ -10,6 +10,7 @@ var STICKER_DOMAINS = []string{
 var SPONSOR_DOMAINS = []string{
 	"cometoplay.kr",
 	"reviewnote.co.kr",
+	"xn--939au0g4vj8sq.net",
 }
 
 // 스티커 클래스 패턴
