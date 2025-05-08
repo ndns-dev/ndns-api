@@ -37,7 +37,6 @@ ENV TESSDATA_PREFIX="/usr/share/tesseract-ocr/4.00/tessdata"
 
 WORKDIR /app
 COPY --from=builder /app/ndns-go .
-COPY .env .
 
 EXPOSE 8085
 
