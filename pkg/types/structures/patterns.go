@@ -51,7 +51,7 @@ var SPONSOR_KEYWORDS = map[string]float64{
 	// 협찬 관련 키워드
 	"체험":   0.3,
 	"지원":   0.4,
-	"제공":   0.4,
+	"제공":   0.5,
 	"무상":   0.4,
 	"무료제공": 0.6,
 	"고료":   0.6,
@@ -64,9 +64,22 @@ var SPONSOR_KEYWORDS = map[string]float64{
 	"작성":    0.01,
 	"후기":    0.01,
 	"받았습니다": 0.2,
-	"받아":    0.01,
-	"받고":    0.01,
+	"받아":    0.2,
+	"받고":    0.2,
 	"로부터":   0.1,
 	"업체":    0.4,
 	"업제":    0.4,
+}
+
+// 정확도
+type SPONSOR_ACCURACY struct {
+	Exact     float64
+	Possible  float64
+	Ambiguous float64
+}
+
+var Accuracy = SPONSOR_ACCURACY{
+	Exact:     0.9,
+	Possible:  0.7,
+	Ambiguous: 0.5,
 }
