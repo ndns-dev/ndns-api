@@ -13,5 +13,5 @@ func SetupRoutes(app *fiber.App) {
 
 	// 도메인별 라우트 설정
 	SetupSearchRoutes("/search", api, services)
-	SetupHealthRoutes(app)
+	SetupAppRoutes(app)
 }
