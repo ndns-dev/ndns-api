@@ -156,16 +156,8 @@ func (o *OCRImpl) runOCR(imagePath string) (string, error) {
 	// OCR 디버깅용
 	fmt.Printf("OCR 실행 - 이미지 경로: %s\n", imagePath)
 
-	// 이미지 정보 확인
-	cmd := exec.Command("identify", "-format", "%w %h", imagePath)
-	output, err := cmd.CombinedOutput()
-	if err == nil {
-		dimensions := strings.TrimSpace(string(output))
-		fmt.Printf("이미지 크기: %s\n", dimensions)
-	}
-
 	// 기본 시도
-	cmd = exec.Command("tesseract",
+	cmd := exec.Command("tesseract",
 		imagePath,
 		"stdout",
 		"-l", "kor",
@@ -173,7 +165,7 @@ func (o *OCRImpl) runOCR(imagePath string) (string, error) {
 		"--oem", "3",
 		"-c", "preserve_interword_spaces=1")
 
-	output, err = cmd.CombinedOutput()
+	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Printf("OCR 실행 실패: %v\n", err)
 	}
