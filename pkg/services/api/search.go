@@ -32,15 +32,15 @@ func NewSearchService() _interface.SearchService {
 }
 
 // SearchBlogPosts는 검색어로 블로그 포스트를 검색합니다
-func (s *SearchImpl) SearchBlogPosts(req request.SearchQuery) ([]structure.BlogPost, error) {
+func (s *SearchImpl) SearchBlogPosts(req request.SearchQuery) ([]structure.BlogPost, int, error) {
 	if s.naverClient == nil {
-		return nil, fmt.Errorf("네이버 API 클라이언트가 초기화되지 않았습니다")
+		return nil, 0, fmt.Errorf("네이버 API 클라이언트가 초기화되지 않았습니다")
 	}
 
 	// 네이버 블로그 검색 API 호출
 	searchResp, err := s.naverClient.SearchBlog(req.Query, req.Limit, req.Offset+1)
 	if err != nil {
-		return nil, fmt.Errorf("네이버 블로그 검색 실패: %v", err)
+		return nil, 0, fmt.Errorf("네이버 블로그 검색 실패: %v", err)
 	}
 
 	// 스폰서 감지 (실패해도 계속 진행)
@@ -52,5 +52,6 @@ func (s *SearchImpl) SearchBlogPosts(req request.SearchQuery) ([]structure.BlogP
 		posts = []structure.BlogPost{}
 	}
 
-	return posts, nil
+	// 네이버 API에서 반환한 총 결과 수 반환
+	return posts, searchResp.Total, nil
 }

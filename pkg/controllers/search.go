@@ -24,7 +24,7 @@ func Search(searchService _interface.SearchService, sponsorService _interface.Sp
 		limit, offset := utils.PaginationRequest(req.Limit, req.Offset)
 		fmt.Printf("limit: %d, offset: %d\n", limit, offset)
 
-		posts, err := searchService.SearchBlogPosts(req)
+		posts, totalResults, err := searchService.SearchBlogPosts(req)
 
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -40,7 +40,7 @@ func Search(searchService _interface.SearchService, sponsorService _interface.Sp
 
 		response := responseDto.Search{
 			Keyword:          req.Query,
-			TotalResults:     len(posts),
+			TotalResults:     totalResults,
 			SponsoredResults: SponsoredResults,
 			Page:             offset/limit + 1,
 			ItemsPerPage:     limit,

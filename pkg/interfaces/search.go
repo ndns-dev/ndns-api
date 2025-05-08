@@ -8,7 +8,7 @@ import (
 // SearchService는 검색 서비스 인터페이스입니다
 type SearchService interface {
 	// SearchBlogPosts는 검색어로 블로그 포스트를 검색합니다
-	SearchBlogPosts(req request.SearchQuery) ([]structure.BlogPost, error)
+	SearchBlogPosts(req request.SearchQuery) ([]structure.BlogPost, int, error)
 }
 
 // SponsorService는 스폰서 감지 서비스 인터페이스입니다
