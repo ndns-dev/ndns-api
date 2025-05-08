@@ -13,7 +13,7 @@ install:
 	go mod tidy
 
 build:
-	go build -ldflags "-X 'github.com/sh5080/ndns-go/pkg/controllers.Version=$(VERSION)'" -o $(APP_NAME) $(MAIN_FILE)
+	go build -ldflags "-X 'github.com/sh5080/ndns-go/pkg/controller.Version=$(VERSION)'" -o $(APP_NAME) $(MAIN_FILE)
 
 run:
 	go run $(MAIN_FILE)
