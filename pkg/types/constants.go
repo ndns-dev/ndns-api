@@ -13,6 +13,13 @@ var SPONSOR_DOMAINS = []string{
 	"xn--939au0g4vj8sq.net",
 }
 
+// 네이버 이미지 패턴
+var NAVER_IMAGE_PATTERNS = []string{
+	"blogfiles.naver.net",
+	"postfiles.pstatic.net",
+	"phinf.pstatic.net",
+}
+
 // 스티커 클래스 패턴
 var STICKER_CLASSES = []string{
 	"se-sticker",

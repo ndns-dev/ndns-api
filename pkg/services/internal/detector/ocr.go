@@ -14,6 +14,7 @@ import (
 	"github.com/sh5080/ndns-go/pkg/configs"
 	_interface "github.com/sh5080/ndns-go/pkg/interfaces"
 	repository "github.com/sh5080/ndns-go/pkg/repositories"
+	constants "github.com/sh5080/ndns-go/pkg/types"
 )
 
 // OCRImpl는 OCR 서비스 구현체입니다
@@ -79,6 +80,29 @@ func (o *OCRImpl) downloadImage(imageURL string) (string, error) {
 	// URL 정규화
 	if !strings.HasPrefix(imageURL, "http://") && !strings.HasPrefix(imageURL, "https://") {
 		imageURL = "https://" + imageURL
+	}
+
+	// URL 최적화: 네이버 블로그 이미지 크기 조정
+	// ?type= 매개변수가 없는 경우 w773 크기 추가
+	isNaverImage := false
+
+	// 네이버 이미지 패턴 확인
+	for _, pattern := range constants.NAVER_IMAGE_PATTERNS {
+		if strings.Contains(imageURL, pattern) {
+			isNaverImage = true
+			break
+		}
+	}
+
+	if isNaverImage {
+		if !strings.Contains(imageURL, "?type=") && !strings.Contains(imageURL, "&type=") {
+			// URL에 이미 쿼리 파라미터가 있는지 확인
+			if strings.Contains(imageURL, "?") {
+				imageURL += "&type=w773" // 쿼리 매개변수가 이미 있으면 &로 추가
+			} else {
+				imageURL += "?type=w773" // 쿼리 매개변수가 없으면 ?로 시작
+			}
+		}
 	}
 
 	// HTTP 요청 생성
