@@ -1,9 +1,10 @@
 name: Docker Pull & Deploy
 
 on:
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows: ["Docker Build and Push"]
+    types:
+      - completed
 
 jobs:
   deploy:
