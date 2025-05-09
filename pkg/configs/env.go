@@ -11,7 +11,8 @@ import (
 
 type EnvConfig struct {
 	Server struct {
-		Port string `mapstructure:"PORT"`
+		Port      string `mapstructure:"PORT"`
+		WorkerURL string `mapstructure:"WORKER_URL"`
 	}
 	AWS struct {
 		AccessKeyID      string `mapstructure:"AWS_ACCESS_KEY_ID"`
@@ -47,6 +48,7 @@ func loadConfig() *EnvConfig {
 	// 필수 환경 변수 확인
 	requiredEnvVars := []string{
 		"PORT",
+		"WORKER_URL",
 		"AWS_ACCESS_KEY_ID",
 		"AWS_SECRET_ACCESS_KEY",
 		"AWS_REGION",
@@ -76,6 +78,7 @@ func loadConfig() *EnvConfig {
 	config := &EnvConfig{}
 	envMapping := map[string]*string{
 		"PORT":                         &config.Server.Port,
+		"WORKER_URL":                   &config.Server.WorkerURL,
 		"AWS_ACCESS_KEY_ID":            &config.AWS.AccessKeyID,
 		"AWS_SECRET_ACCESS_KEY":        &config.AWS.SecretAccessKey,
 		"AWS_REGION":                   &config.AWS.Region,
