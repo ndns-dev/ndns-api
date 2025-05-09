@@ -1,21 +1,20 @@
 package detector
 
 import (
+	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/sh5080/ndns-go/pkg/configs"
 	_interface "github.com/sh5080/ndns-go/pkg/interfaces"
 	repository "github.com/sh5080/ndns-go/pkg/repositories"
 	constants "github.com/sh5080/ndns-go/pkg/types"
+	"github.com/sh5080/ndns-go/pkg/utils"
 )
 
 // OCRImpl는 OCR 서비스 구현체입니다
@@ -78,34 +77,11 @@ func (o *OCRImpl) ExtractTextFromImage(imageURL string) (string, error) {
 
 // downloadImage는 이미지 URL에서 이미지를 다운로드합니다
 func (o *OCRImpl) downloadImage(imageURL string) (string, error) {
-	// URL 정규화
 	if !strings.HasPrefix(imageURL, "http://") && !strings.HasPrefix(imageURL, "https://") {
 		imageURL = "https://" + imageURL
 	}
 
-	// URL 인코딩: 한글 등 특수 문자가 포함된 경우 인코딩
-	parsedURL, err := url.Parse(imageURL)
-	if err != nil {
-		return "", fmt.Errorf("URL 파싱 오류: %v", err)
-	}
-
-	// 각 경로 세그먼트를 개별적으로 인코딩
-	pathSegments := strings.Split(parsedURL.Path, "/")
-	for i, segment := range pathSegments {
-		if segment != "" {
-			pathSegments[i] = url.PathEscape(segment)
-		}
-	}
-	parsedURL.Path = strings.Join(pathSegments, "/")
-
-	// 인코딩된 URL로 업데이트
-	imageURL = parsedURL.String()
-
-	// URL 최적화: 네이버 블로그 이미지 크기 조정
-	// ?type= 매개변수가 없는 경우 w773 크기 추가
 	isNaverImage := false
-
-	// 네이버 이미지 패턴 확인
 	for _, pattern := range constants.NAVER_IMAGE_PATTERNS {
 		if strings.Contains(imageURL, pattern) {
 			isNaverImage = true
@@ -115,59 +91,72 @@ func (o *OCRImpl) downloadImage(imageURL string) (string, error) {
 
 	if isNaverImage {
 		if !strings.Contains(imageURL, "?type=") && !strings.Contains(imageURL, "&type=") {
-			// URL에 이미 쿼리 파라미터가 있는지 확인
 			if strings.Contains(imageURL, "?") {
-				imageURL += "&type=w773" // 쿼리 매개변수가 이미 있으면 &로 추가
+				imageURL += "&type=w773"
 			} else {
-				imageURL += "?type=w773" // 쿼리 매개변수가 없으면 ?로 시작
+				imageURL += "?type=w773"
 			}
 		}
 	}
 
-	// HTTP 요청 생성
-	req, err := http.NewRequest("GET", imageURL, nil)
-	if err != nil {
-		return "", fmt.Errorf("요청 생성 실패: %v", err)
+	// 내부 함수: 실제 요청 실행
+	doRequest := func(url string, timeout time.Duration) (*http.Response, error) {
+		// 타임아웃 컨텍스트 생성 (이미지 전체를 다운로드하는 데 필요한 충분한 시간 제공)
+		ctx, cancel := context.WithTimeout(context.Background(), timeout*time.Second)
+
+		// 응답 객체와 에러를 반환할 변수 선언
+		var resp *http.Response
+		var err error
+		// 요청 준비
+		req, reqErr := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if reqErr != nil {
+			cancel() // 컨텍스트 취소
+			return nil, reqErr
+		}
+
+		req.Header.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+		req.Header.Add("Accept", "image/webp,image/apng,image/*,*/*;q=0.8")
+		req.Header.Add("Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7")
+
+		// HTTP 클라이언트 생성 - 컨텍스트 타임아웃과는 별도로 클라이언트 타임아웃도 설정
+		client := &http.Client{
+			Timeout: (timeout + 2) * time.Second, // 컨텍스트보다 약간 더 긴 타임아웃
+		}
+
+		resp, err = client.Do(req)
+
+		// 오류가 발생하면 컨텍스트를 취소하고 결과 반환
+		if err != nil {
+			cancel()
+			return nil, err
+		}
+
+		// 성공적인 응답이 아니면 컨텍스트 취소
+		if resp.StatusCode != http.StatusOK {
+			cancel()
+			return resp, nil
+		}
+
+		// 응답이 성공적이면 컨텍스트 취소는 defer로 미룸
+		// 이미지 다운로드가 완료된 후에 취소됨
+		return resp, nil
 	}
 
-	// 요청 헤더 추가 (브라우저 에뮬레이션)
-	req.Header.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
-	req.Header.Add("Accept", "image/webp,image/apng,image/*,*/*;q=0.8")
-	req.Header.Add("Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7")
+	// 1차 시도: 원본 주소 (3초 제한)
+	resp, err := doRequest(imageURL, 3)
 
-	// 요청 실행
-	resp, err := o.Client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("요청 실행 실패: %v", err)
+	if err != nil || (resp != nil && resp.StatusCode != http.StatusOK) {
+		// 2차 시도: Cloudflare Worker 프록시 경유
+		workerURL := configs.GetConfig().Server.WorkerURL + "?url=" + url.QueryEscape(imageURL)
+		resp, err = doRequest(workerURL, 3)
+		if err != nil {
+			return "", fmt.Errorf("이미지 요청 실패 (우회 포함): %v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			return "", fmt.Errorf("프록시 HTTP 오류 (%d)", resp.StatusCode)
+		}
 	}
-	defer resp.Body.Close()
-
-	// 응답 상태 확인
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("HTTP 오류 (%d)", resp.StatusCode)
-	}
-
-	// 임시 파일 생성
-	tempDir := os.TempDir()
-	// 원본 이미지 URL에서 확장자 추출
-	ext := filepath.Ext(strings.Split(imageURL, "?")[0])
-	tempFileName := uuid.New().String() + ext
-	tempFilePath := filepath.Join(tempDir, tempFileName)
-
-	// 이미지 파일 저장
-	file, err := os.Create(tempFilePath)
-	if err != nil {
-		return "", fmt.Errorf("임시 파일 생성 실패: %v", err)
-	}
-	defer file.Close()
-
-	// 이미지 데이터 복사
-	_, err = io.Copy(file, resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("이미지 저장 실패: %v", err)
-	}
-
-	return tempFilePath, nil
+	return utils.SaveResponseToFile(resp, imageURL)
 }
 
 // runOCR은 이미지 파일에서 텍스트를 추출합니다
