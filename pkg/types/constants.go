@@ -1,5 +1,7 @@
 package constants
 
+import "time"
+
 // 스티커 도메인 패턴
 var STICKER_DOMAINS = []string{
 	"storep-phinf.pstatic.net",
@@ -45,3 +47,10 @@ var CONTENT_SELECTORS = []string{
 	"#postViewArea",      // 일반 포스트
 	".post-content",      // 일반적인 블로그 본문 클래스
 }
+
+// 타임아웃 시간
+var TIMEOUT = 4 * time.Second
+
+const MAX_IMAGE_SIZE = 12000000  // 1200만 픽셀 (약 4000x3000 크기)
+const MAX_IMAGE_DIMENSION = 1200 // 픽셀 단위 (1200x1200 이상인 이미지는 크롭)
+const CROP_HEIGHT = 500          // 상단 500픽셀만 사용
