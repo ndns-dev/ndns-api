@@ -40,6 +40,7 @@ var EXACT_SPONSOR_KEYWORDS_PATTERNS = []string{
 	"소정의",
 	"체험단",
 	"협찬",
+	"수수료",
 	// ocr로 잘못 읽었지만 협찬 패턴
 	"[현산",
 	"현찬",
