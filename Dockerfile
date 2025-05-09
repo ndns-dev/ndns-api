@@ -1,5 +1,5 @@
 # 디버그용 스테이지 (go build 문제 조사용)
-FROM golang:1.24.2 AS debug
+FROM golang:1.24.2 AS builder
 
 WORKDIR /app
 COPY . .
@@ -41,8 +41,9 @@ WORKDIR /app
 
 # 로컬에서 미리 빌드한 바이너리 복사 (CI 환경에서 먼저 빌드해야 함)
 # 이 파일이 없으면 Docker 빌드가 실패합니다
-COPY ./ndns-go .
-# COPY --from=debug /app/ndns-go . # debug 스테이지에서 빌드에 성공한 경우 사용
+# COPY ./ndns-go .
+#builder 스테이지에서 빌드에 성공한 경우 사용
+COPY --from=builder /app/ndns-go . 
 
 EXPOSE 8085
 
