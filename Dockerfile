@@ -1,5 +1,5 @@
-# 빌더 스테이지
-FROM golang:1.24.2 AS builder
+# 디버그용 스테이지 (go build 문제 조사용)
+FROM golang:1.24.2 AS debug
 
 WORKDIR /app
 COPY . .
@@ -12,9 +12,11 @@ ENV CGO_ENABLED=0 \
 ARG BUILD_VERSION=dev
 
 RUN go mod tidy
+RUN go version
+RUN go env
 
-# Version 심볼 주입 (패키지 경로 정확히 명시)
-RUN go build -ldflags "-X 'github.com/sh5080/ndns-go/pkg/controller.Version=${BUILD_VERSION}'" -o ndns-go ./pkg/main.go
+# 1차 대안: 실패하더라도 계속 진행 (최종 이미지는 prebuilt 바이너리 사용)
+RUN go build -ldflags "-X 'github.com/sh5080/ndns-go/pkg/controller.Version=${BUILD_VERSION}'" -o ndns-go ./pkg/main.go || echo "빌드 실패, 로컬 바이너리 사용 예정"
 
 # 런타임 스테이지
 FROM ubuntu:20.04
@@ -36,7 +38,11 @@ ENV PATH="/usr/bin:${PATH}"
 ENV TESSDATA_PREFIX="/usr/share/tesseract-ocr/4.00/tessdata"
 
 WORKDIR /app
-COPY --from=builder /app/ndns-go .
+
+# 로컬에서 미리 빌드한 바이너리 복사 (CI 환경에서 먼저 빌드해야 함)
+# 이 파일이 없으면 Docker 빌드가 실패합니다
+COPY ./ndns-go .
+# COPY --from=debug /app/ndns-go . # debug 스테이지에서 빌드에 성공한 경우 사용
 
 EXPOSE 8085
 

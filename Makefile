@@ -21,11 +21,26 @@ run:
 run-prod:
 	./ndns-go
 
+# 크로스 컴파일 (리눅스용 바이너리 생성)
+build-linux:
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-X 'github.com/sh5080/ndns-go/pkg/controller.Version=$(VERSION)'" -o $(APP_NAME) $(MAIN_FILE)
+
 # Docker 빌드 (go build 포함)
-docker-build:
+docker-build: build-linux
 	docker buildx build \
 		--platform $(PLATFORM) \
 		--build-arg BUILD_VERSION=$(VERSION) \
+		-t $(APP_NAME) . \
+		--load
+
+# Docker 빌드 (빌드 과정 스킵, 로컬 바이너리 사용)
+docker-build-skip-go:
+	@if [ ! -f $(APP_NAME) ]; then \
+		echo "로컬 바이너리가 없습니다. 빌드 중..."; \
+		$(MAKE) build-linux; \
+	fi
+	docker buildx build \
+		--platform $(PLATFORM) \
 		-t $(APP_NAME) . \
 		--load
 
