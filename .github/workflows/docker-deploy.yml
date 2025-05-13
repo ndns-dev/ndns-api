@@ -26,12 +26,12 @@ jobs:
             --filters "Name=tag:Name,Values=ndns-go" "Name=instance-state-name,Values=running" \
             --query "Reservations[*].Instances[*].PublicIpAddress" \
             --output text)
-          echo "PUBLIC_IP=$IP" >> $GITHUB_OUTPUT
+          echo "PUBLIC_IP=$IP" >> $GITHUB_ENV
 
       - name: Deploy to Server via SSH
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ steps.get_ip.outputs.PUBLIC_IP }}
+          host: ${{ env.PUBLIC_IP }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_SSH_PORT }}
