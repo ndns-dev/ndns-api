@@ -17,14 +17,15 @@ import (
 )
 
 // CrawlBlogPost는 블로그 포스트 URL에서 콘텐츠를 크롤링합니다
-func CrawlBlogPost(url string) (*structure.CrawlResult, error) {
+// is2025OrLater가 true일 경우 마지막 데이터는 가져오지 않습니다.
+func CrawlBlogPost(url string, is2025OrLater bool) (*structure.CrawlResult, error) {
 	if url == "" {
 		return nil, fmt.Errorf("URL이 비어 있습니다")
 	}
 
 	// URL 정규화
 	url = normalizeURL(url)
-	fmt.Printf("크롤링 시작: %s\n", url)
+	utils.DebugLog("크롤링 시작: %s (2025년 이후 포스트: %v)\n", url, is2025OrLater)
 
 	// 결과 초기화
 	result := &structure.CrawlResult{
@@ -46,25 +47,16 @@ func CrawlBlogPost(url string) (*structure.CrawlResult, error) {
 			if err != nil {
 				return nil, fmt.Errorf("iframe 내부 콘텐츠 가져오기 실패: %v", err)
 			}
-			parseNaverBlog(contentDoc, result)
-
+			// 2025년 이후 포스트 여부에 따라 다른 파싱 함수 호출
+			if is2025OrLater {
+				parseNaverBlogFirst(contentDoc, result)
+			} else {
+				parseNaverBlogFull(contentDoc, result)
+			}
 		}
-	} else if strings.Contains(url, "tistory.com") {
-		// 티스토리 블로그 크롤링
-		doc, err := fetchHTML(url)
-		if err != nil {
-			return nil, err
-		}
-		parseTistoryBlog(doc, result)
 	} else {
-		// 기타 블로그 크롤링
-		doc, err := fetchHTML(url)
-		if err != nil {
-			return nil, err
-		}
-		parseGenericBlog(doc, result)
+		return nil, fmt.Errorf("지원하지 않는 블로그 플랫폼입니다")
 	}
-
 	return result, nil
 }
 
@@ -148,9 +140,19 @@ func extractNaverIframeURL(doc *goquery.Document, originalURL string) string {
 	return iframeSrc
 }
 
-// parseNaverBlog는 네이버 블로그 HTML을 파싱합니다
-func parseNaverBlog(doc *goquery.Document, result *structure.CrawlResult) {
-	// 스티커 이미지 추출
+// parseNaverBlogFirst는 네이버 블로그 HTML에서 첫 번째 데이터만 파싱합니다 (2025년 이후)
+func parseNaverBlogFirst(doc *goquery.Document, result *structure.CrawlResult) {
+	// 첫 번째 스티커 이미지 추출
+	extractFirstStickerOnly(doc, result)
+	// 첫 번째 일반 이미지 추출
+	extractFirstImageOnly(doc, result)
+	// 첫 번째 문단 추출
+	extractFirstParagraphOnly(doc, result)
+}
+
+// parseNaverBlogFull은 네이버 블로그 HTML에서 모든 데이터를 파싱합니다 (2025년 이전)
+func parseNaverBlogFull(doc *goquery.Document, result *structure.CrawlResult) {
+	// 첫 번째 스티커 이미지 추출
 	extractFirstSticker(doc, result)
 	// 일반 이미지 추출
 	extractFirstImage(doc, result)
@@ -158,15 +160,14 @@ func parseNaverBlog(doc *goquery.Document, result *structure.CrawlResult) {
 	extractFirstParagraph(doc, result)
 }
 
-// extractFirstSticker는 첫 번째 스티커를 추출합니다
-func extractFirstSticker(doc *goquery.Document, result *structure.CrawlResult) {
+// extractFirstStickerOnly는 첫 번째 스티커만 추출합니다 (2025년 이후 포스트용)
+func extractFirstStickerOnly(doc *goquery.Document, result *structure.CrawlResult) {
+	// 모든 스티커 URL을 저장할 슬라이스
+	var stickerURLs []string
+
 	// 1. 스티커 클래스로 찾기
 	for _, stickerClass := range constants.STICKER_CLASSES {
 		doc.Find("[class*='" + stickerClass + "']").Each(func(i int, elem *goquery.Selection) {
-			if result.StickerURL != "" {
-				return
-			}
-
 			// 이미지 태그 찾기
 			img := elem.Find("img")
 			if img.Length() > 0 && img.AttrOr("src", "") != "" {
@@ -174,42 +175,26 @@ func extractFirstSticker(doc *goquery.Document, result *structure.CrawlResult) {
 				// 스티커 도메인 확인
 				for _, domain := range constants.STICKER_DOMAINS {
 					if strings.Contains(imgURL, domain) {
-						result.StickerURL = imgURL
-						return
+						stickerURLs = append(stickerURLs, imgURL)
+						break
 					}
 				}
 			}
 
-			// 배경 이미지 스타일 확인
-			style := elem.AttrOr("style", "")
-			if strings.Contains(style, "background-image") {
-				urlRegex := regexp.MustCompile(`url\(['"]?(.*?)['"]?\)`)
-				matches := urlRegex.FindStringSubmatch(style)
-				if len(matches) > 1 {
-					imgURL := matches[1]
-					// 스티커 도메인 확인
-					for _, domain := range constants.STICKER_DOMAINS {
-						if strings.Contains(imgURL, domain) {
-							result.StickerURL = imgURL
-							return
-						}
-					}
-				}
+			// 첫 번째 스티커를 찾았으면 루프 종료
+			if len(stickerURLs) > 0 {
+				return
 			}
 		})
 
-		if result.StickerURL != "" {
+		if len(stickerURLs) > 0 {
 			break
 		}
 	}
 
 	// 2. data-linkdata 속성으로 찾기 (네이버 블로그 특유의 구조)
-	if result.StickerURL == "" {
+	if len(stickerURLs) == 0 {
 		doc.Find("[data-linkdata]").Each(func(i int, elem *goquery.Selection) {
-			if result.StickerURL != "" {
-				return
-			}
-
 			linkData := elem.AttrOr("data-linkdata", "")
 			if linkData != "" {
 				var data map[string]interface{}
@@ -219,36 +204,32 @@ func extractFirstSticker(doc *goquery.Document, result *structure.CrawlResult) {
 					// 스티커 도메인 확인
 					for _, domain := range constants.STICKER_DOMAINS {
 						if strings.Contains(imgURL, domain) {
-							result.StickerURL = imgURL
-							return
+							stickerURLs = append(stickerURLs, imgURL)
+							break
 						}
 					}
 				}
 			}
+
+			// 첫 번째 스티커를 찾았으면 루프 종료
+			if len(stickerURLs) > 0 {
+				return
+			}
 		})
 	}
 
-	// 3. 이미지 태그 확인
-	if result.StickerURL == "" {
-		doc.Find("img").Each(func(i int, img *goquery.Selection) {
-			if result.StickerURL != "" {
-				return
-			}
-
-			imgURL := img.AttrOr("src", "")
-			// 스티커 도메인 확인
-			for _, domain := range constants.STICKER_DOMAINS {
-				if strings.Contains(imgURL, domain) {
-					result.StickerURL = imgURL
-					return
-				}
-			}
-		})
+	// 결과 설정
+	if len(stickerURLs) > 0 {
+		result.FirstStickerURL = stickerURLs[0]
+		// 마지막 스티커는 수집하지 않음 (2025년 이후 포스트)
+		result.LastStickerURL = ""
 	}
 }
 
-// extractFirstImage는 첫 번째 이미지를 본문 영역에서만 추출합니다
-func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
+// extractFirstImageOnly는 첫 번째 이미지만 추출합니다 (2025년 이후 포스트용)
+func extractFirstImageOnly(doc *goquery.Document, result *structure.CrawlResult) {
+	// 모든 이미지 URL을 저장할 슬라이스
+	var imageURLs []string
 
 	// 본문 영역 찾기
 	var contentArea *goquery.Selection
@@ -264,135 +245,53 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 		contentArea = doc.Selection
 	}
 
-	// 0. 인라인 이미지 및 data-linkdata 속성 확인 (협찬 이미지에 특히 중요)
-	contentArea.Find(".se-inline-image, .se-module-image").Each(func(i int, imgContainer *goquery.Selection) {
-		if result.ImageURL != "" {
-			return
-		}
-
-		// data-linkdata 속성 확인 (JSON 데이터로 이미지 URL 포함)
-		linkElem := imgContainer.Find("a[data-linkdata], [data-linkdata]").First()
-		if linkElem.Length() > 0 {
-			linkData := linkElem.AttrOr("data-linkdata", "")
-			if linkData != "" {
-				var data map[string]interface{}
-				err := json.Unmarshal([]byte(linkData), &data)
-				if err == nil && data["src"] != nil {
-					imgURL := data["src"].(string)
-					result.ImageURL = imgURL
-					return
-				}
-			}
-		}
-
-		// 직접 이미지 태그 확인
-		img := imgContainer.Find("img").First()
-		if img.Length() > 0 {
-			imgURL := img.AttrOr("src", "")
-			if imgURL != "" {
-				fmt.Printf("인라인 이미지 태그에서 발견: %s\n", imgURL)
-				result.ImageURL = imgURL
-				return
-			}
-		}
-	})
-
-	// 이미지를 이미 찾았으면 다른 방법은 시도하지 않음
-	if result.ImageURL != "" {
-		return
-	}
-
-	// 1. 스마트에디터 이미지 리소스 확인
-	contentArea.Find(".se-image-resource").Each(func(i int, img *goquery.Selection) {
-		if result.ImageURL != "" {
-			return
-		}
-
-		// 상위 요소가 스티커 모듈이 아닌지 확인
-		if img.ParentsFiltered(".se-module-sticker").Length() > 0 {
-			return // 스티커 모듈 내부의 이미지는 건너뜀
+	// 이미지 검색 (첫 번째 이미지만 찾음)
+	contentArea.Find("img").Each(func(i int, img *goquery.Selection) {
+		// 상위 요소가 스티커 관련 요소가 아닌지 확인
+		if img.ParentsFiltered("[class*='sticker']").Length() > 0 {
+			return // 스티커 관련 요소 내부의 이미지는 건너뜀
 		}
 
 		imgURL := img.AttrOr("src", "")
+		if imgURL == "" {
+			imgURL = img.AttrOr("data-src", "")
+		}
+
 		if imgURL != "" {
-			result.ImageURL = imgURL
+			// 이미지가 스티커가 아닌지 확인
+			isSticker := false
+			for _, domain := range constants.STICKER_DOMAINS {
+				if strings.Contains(imgURL, domain) {
+					isSticker = true
+					break
+				}
+			}
+
+			if !isSticker {
+				imageURLs = append(imageURLs, imgURL)
+				return // 첫 번째 이미지를 찾았으면 루프 종료
+			}
 		}
 	})
 
-	// 2. se-component 이미지 확인
-	if result.ImageURL == "" {
-		contentArea.Find(".se-component.se-image").Each(func(i int, component *goquery.Selection) {
-			if result.ImageURL != "" {
-				return
-			}
-
-			// 이미지 모듈 찾기
-			img := component.Find(".se-module-image .se-image-resource").First()
-			if img.Length() > 0 {
-				imgURL := img.AttrOr("src", "")
-				if imgURL != "" {
-					result.ImageURL = imgURL
-					return
-				}
-			}
-
-			// 링크 데이터 확인
-			link := component.Find(".se-module-image-link").First()
-			if link.Length() > 0 {
-				linkData := link.AttrOr("data-linkdata", "")
-				if linkData != "" {
-					var data map[string]interface{}
-					err := json.Unmarshal([]byte(linkData), &data)
-					if err == nil && data["src"] != nil {
-						imgURL := data["src"].(string)
-						result.ImageURL = imgURL
-					}
-				}
-			}
-		})
-	}
-
-	// 3. 일반 이미지 확인
-	if result.ImageURL == "" {
-		contentArea.Find("img").Each(func(i int, img *goquery.Selection) {
-			if result.ImageURL != "" {
-				return
-			}
-
-			// 상위 요소가 스티커 관련 요소가 아닌지 확인
-			if img.ParentsFiltered("[class*='sticker']").Length() > 0 {
-				return // 스티커 관련 요소 내부의 이미지는 건너뜀
-			}
-
-			imgURL := img.AttrOr("src", "")
-			if imgURL == "" {
-				imgURL = img.AttrOr("data-src", "")
-			}
-			if imgURL == "" {
-				imgURL = img.AttrOr("data-lazy-src", "")
-			}
-
-			if imgURL != "" && (strings.HasPrefix(imgURL, "http://") || strings.HasPrefix(imgURL, "https://")) {
-				result.ImageURL = imgURL
-			}
-		})
-	}
-	if result.ImageURL != "" && strings.HasSuffix(result.ImageURL, "w80_blur") {
-		result.ImageURL = strings.Replace(result.ImageURL, "w80_blur", "w773", 1)
+	// 결과 설정
+	if len(imageURLs) > 0 {
+		result.FirstImageURL = imageURLs[0]
+		// 마지막 이미지는 수집하지 않음 (2025년 이후 포스트)
+		result.LastImageURL = ""
 	}
 }
 
-// extractFirstParagraph는 첫 번째 문단과 인용구를 추출합니다
-func extractFirstParagraph(doc *goquery.Document, result *structure.CrawlResult) {
+// extractFirstParagraphOnly는 첫 번째 문단만 추출합니다 (2025년 이후 포스트용)
+func extractFirstParagraphOnly(doc *goquery.Document, result *structure.CrawlResult) {
+	// 모든 문단을 저장할 슬라이스
+	var paragraphs []string
+
 	// 본문 영역 찾기
 	var contentArea *goquery.Selection
-
-	// 각 선택자별로 확인 및 내용 출력
 	for _, selector := range constants.CONTENT_SELECTORS {
 		selected := doc.Find(selector)
-		count := selected.Length()
-
-		if count > 0 {
+		if selected.Length() > 0 {
 			contentArea = selected.First()
 			break
 		}
@@ -400,73 +299,10 @@ func extractFirstParagraph(doc *goquery.Document, result *structure.CrawlResult)
 
 	// 본문 영역을 찾지 못한 경우 전체 HTML 사용
 	if contentArea == nil || contentArea.Length() == 0 {
-		fmt.Printf("본문 영역을 찾지 못해 전체 HTML을 사용합니다.\n")
 		contentArea = doc.Selection
 	}
 
-	// 인용구 확인
-	quotationText := ""
-	quotationFound := false
-
-	// 인용구 선택자 확인 (네이버 블로그 스마트에디터 패턴에 맞게 개선)
-	quotationSelectors := []string{
-		".se-quotation-container", // 스마트에디터 2.0 인용구
-		"blockquote",              // 일반 인용구
-	}
-
-	for _, selector := range quotationSelectors {
-		quotes := contentArea.Find(selector)
-
-		if quotes.Length() > 0 {
-			quotes.EachWithBreak(func(i int, quote *goquery.Selection) bool {
-				if i >= 2 { // 처음 2개까지만
-					return false
-				}
-
-				// 텍스트 추출 (span 내부까지 확인)
-				text := ""
-
-				// 인용구 내부의 span 태그 확인 (색상 등 스타일 적용된 텍스트)
-				spans := quote.Find("span")
-				if spans.Length() > 0 {
-					spans.Each(func(j int, span *goquery.Selection) {
-						spanText := strings.TrimSpace(span.Text())
-						if spanText != "" && !strings.Contains(text, spanText) {
-							if text != "" {
-								text += " "
-							}
-							text += spanText
-						}
-					})
-				}
-
-				// span에서 텍스트를 찾지 못했으면 직접 텍스트 추출
-				if text == "" {
-					text = strings.TrimSpace(quote.Text())
-				}
-
-				// 텍스트 정리 (특수문자 제거)
-				text = cleanText(text)
-
-				if text != "" && len(text) > 5 {
-					quotationText = text
-					quotationFound = true
-					return false
-				}
-				return true
-			})
-		}
-
-		if quotationFound {
-			break
-		}
-	}
-
-	if !quotationFound {
-		fmt.Printf("인용구를 찾지 못했습니다.\n")
-	}
-
-	// 일반 문단 확인
+	// 문단 선택자 확인
 	paragraphSelectors := []string{
 		".se-text-paragraph", // 스마트에디터 2.0 문단
 		".se-module-text p",  // 스마트에디터 모듈 내 문단
@@ -475,111 +311,36 @@ func extractFirstParagraph(doc *goquery.Document, result *structure.CrawlResult)
 		"p",                  // 일반 문단 태그
 	}
 
-	firstParagraph := ""
-	paragraphFound := false
-
+	// 첫 번째 의미 있는 문단 찾기
+	foundFirst := false
 	for _, selector := range paragraphSelectors {
-		paragraphElements := contentArea.Find(selector)
-		paragraphCount := paragraphElements.Length()
-
-		if paragraphCount > 0 {
-			paragraphElements.EachWithBreak(func(i int, p *goquery.Selection) bool {
-				// 텍스트 추출 시 span 내부도 확인
-				text := ""
-				spans := p.Find("span")
-				if spans.Length() > 0 {
-					spans.Each(func(j int, span *goquery.Selection) {
-						spanText := strings.TrimSpace(span.Text())
-						if spanText != "" && !strings.Contains(text, spanText) {
-							if text != "" {
-								text += " "
-							}
-							text += spanText
-						}
-					})
-				}
-
-				// span에서 텍스트를 찾지 못했으면 직접 텍스트 추출
-				if text == "" {
-					text = strings.TrimSpace(p.Text())
-				}
-
-				// 텍스트 정리 (특수문자 제거)
-				text = cleanText(text)
-
-				if text != "" && len(text) > 5 && text != "" {
-					firstParagraph = text
-					paragraphFound = true
-					return false
-				}
-				return true
-			})
-		}
-
-		if paragraphFound {
-			fmt.Printf("적합한 문단을 찾았습니다!\n")
+		if foundFirst {
 			break
 		}
-	}
 
-	// 문단을 찾지 못한 경우 대체 방법 시도
-	if !paragraphFound {
-		fmt.Printf("표준 선택자로 문단을 찾지 못했습니다. 다른 방법 시도 중...\n")
-
-		// 1. div 직접 검색
-		contentArea.Find("div.se-module-text").Each(func(i int, div *goquery.Selection) {
-			if i > 10 || paragraphFound { // 처음 10개만 확인
+		paragraphElements := contentArea.Find(selector)
+		paragraphElements.Each(func(i int, p *goquery.Selection) {
+			if foundFirst {
 				return
 			}
 
-			// 먼저 span 내부 확인
-			var texts []string
-			div.Find("span").Each(func(j int, span *goquery.Selection) {
-				spanText := strings.TrimSpace(span.Text())
-				if spanText != "" && len(spanText) > 5 {
-					texts = append(texts, spanText)
-				}
-			})
-
-			text := strings.Join(texts, " ")
-
-			// span이 없거나 비어있으면 div 자체 텍스트 사용
-			if text == "" {
-				text = strings.TrimSpace(div.Text())
-			}
-
-			// 텍스트 정리
+			// 텍스트 추출
+			text := strings.TrimSpace(p.Text())
 			text = cleanText(text)
 
-			if text != "" && len(text) > 30 && len(text) < 500 {
-				fmt.Printf("DIV에서 가능한 문단 발견 (%d 바이트): %s...\n", len(text), text[:min(len(text), 100)])
-				if firstParagraph == "" {
-					firstParagraph = text
-					paragraphFound = true
-				}
+			if text != "" && len(text) > 10 {
+				paragraphs = append(paragraphs, text)
+				foundFirst = true
+				return
 			}
 		})
 	}
 
-	// 문단과 인용구 결합
-	if firstParagraph != "" || quotationText != "" {
-		combinedText := ""
-
-		if firstParagraph != "" {
-			combinedText = firstParagraph
-		}
-
-		if quotationText != "" {
-			if combinedText != "" {
-				combinedText += " "
-			}
-			combinedText += quotationText
-		}
-
-		result.FirstParagraph = combinedText
-		fmt.Printf("최종 추출된 문단 (%d 바이트):\n%s\n", len(combinedText), combinedText)
-	} else {
-		fmt.Printf("문단과 인용구를 모두 찾지 못했습니다.\n")
+	// FirstParagraph 설정
+	if len(paragraphs) > 0 {
+		result.FirstParagraph = paragraphs[0]
+		// 마지막 문단은 수집하지 않음 (2025년 이후 포스트)
+		result.LastParagraph = ""
 	}
 }
 
@@ -611,9 +372,9 @@ func min(a, b int) int {
 func parseTistoryBlog(doc *goquery.Document, result *structure.CrawlResult) {
 	// 이미지 추출
 	doc.Find("article img, .article img, .entry-content img").Each(func(i int, s *goquery.Selection) {
-		if i == 0 && result.ImageURL == "" {
+		if i == 0 && result.FirstImageURL == "" {
 			if src, exists := s.Attr("src"); exists {
-				result.ImageURL = src
+				result.FirstImageURL = src
 			}
 		}
 	})
@@ -634,9 +395,9 @@ func parseTistoryBlog(doc *goquery.Document, result *structure.CrawlResult) {
 func parseGenericBlog(doc *goquery.Document, result *structure.CrawlResult) {
 	// 이미지 추출
 	doc.Find("article img, .article img, .content img, .post img, .entry img").Each(func(i int, s *goquery.Selection) {
-		if i == 0 && result.ImageURL == "" {
+		if i == 0 && result.FirstImageURL == "" {
 			if src, exists := s.Attr("src"); exists {
-				result.ImageURL = src
+				result.FirstImageURL = src
 			}
 		}
 	})
@@ -660,4 +421,402 @@ func normalizeURL(url string) string {
 		url = "https://" + url
 	}
 	return url
+}
+
+// extractFirstSticker는 첫 번째와 마지막 스티커를 추출합니다
+func extractFirstSticker(doc *goquery.Document, result *structure.CrawlResult) {
+	// 모든 스티커 URL을 저장할 슬라이스
+	var stickerURLs []string
+
+	// 1. 스티커 클래스로 찾기
+	for _, stickerClass := range constants.STICKER_CLASSES {
+		doc.Find("[class*='" + stickerClass + "']").Each(func(i int, elem *goquery.Selection) {
+			// 이미지 태그 찾기
+			img := elem.Find("img")
+			if img.Length() > 0 && img.AttrOr("src", "") != "" {
+				imgURL := img.AttrOr("src", "")
+				// 스티커 도메인 확인
+				for _, domain := range constants.STICKER_DOMAINS {
+					if strings.Contains(imgURL, domain) {
+						stickerURLs = append(stickerURLs, imgURL)
+						break
+					}
+				}
+			}
+
+			// 배경 이미지 스타일 확인
+			style := elem.AttrOr("style", "")
+			if strings.Contains(style, "background-image") {
+				urlRegex := regexp.MustCompile(`url\(['"]?(.*?)['"]?\)`)
+				matches := urlRegex.FindStringSubmatch(style)
+				if len(matches) > 1 {
+					imgURL := matches[1]
+					// 스티커 도메인 확인
+					for _, domain := range constants.STICKER_DOMAINS {
+						if strings.Contains(imgURL, domain) {
+							stickerURLs = append(stickerURLs, imgURL)
+							break
+						}
+					}
+				}
+			}
+		})
+
+		if len(stickerURLs) > 0 {
+			break
+		}
+	}
+
+	// 2. data-linkdata 속성으로 찾기 (네이버 블로그 특유의 구조)
+	if len(stickerURLs) == 0 {
+		doc.Find("[data-linkdata]").Each(func(i int, elem *goquery.Selection) {
+			linkData := elem.AttrOr("data-linkdata", "")
+			if linkData != "" {
+				var data map[string]interface{}
+				err := json.Unmarshal([]byte(linkData), &data)
+				if err == nil && data["src"] != nil {
+					imgURL := data["src"].(string)
+					// 스티커 도메인 확인
+					for _, domain := range constants.STICKER_DOMAINS {
+						if strings.Contains(imgURL, domain) {
+							stickerURLs = append(stickerURLs, imgURL)
+							break
+						}
+					}
+				}
+			}
+		})
+	}
+
+	// 3. 이미지 태그 확인
+	if len(stickerURLs) == 0 {
+		doc.Find("img").Each(func(i int, img *goquery.Selection) {
+			imgURL := img.AttrOr("src", "")
+			// 스티커 도메인 확인
+			for _, domain := range constants.STICKER_DOMAINS {
+				if strings.Contains(imgURL, domain) {
+					stickerURLs = append(stickerURLs, imgURL)
+					break
+				}
+			}
+		})
+	}
+
+	// 결과 설정
+	if len(stickerURLs) > 0 {
+		result.FirstStickerURL = stickerURLs[0]
+		if len(stickerURLs) > 1 {
+			result.LastStickerURL = stickerURLs[len(stickerURLs)-1]
+		} else {
+			result.LastStickerURL = result.FirstStickerURL
+		}
+	}
+}
+
+// extractFirstImage는 본문 영역에서 첫 번째와 마지막 이미지를 추출합니다
+func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
+	// 모든 이미지 URL을 저장할 슬라이스
+	var imageURLs []string
+
+	// 본문 영역 찾기
+	var contentArea *goquery.Selection
+	for _, selector := range constants.CONTENT_SELECTORS {
+		contentArea = doc.Find(selector).First()
+		if contentArea.Length() > 0 {
+			break
+		}
+	}
+
+	// 본문 영역을 찾지 못한 경우 전체 HTML 사용
+	if contentArea == nil || contentArea.Length() == 0 {
+		contentArea = doc.Selection
+	}
+
+	// 0. 인라인 이미지 및 data-linkdata 속성 확인 (협찬 이미지에 특히 중요)
+	contentArea.Find(".se-inline-image, .se-module-image").Each(func(i int, imgContainer *goquery.Selection) {
+		// data-linkdata 속성 확인 (JSON 데이터로 이미지 URL 포함)
+		linkElem := imgContainer.Find("a[data-linkdata], [data-linkdata]").First()
+		if linkElem.Length() > 0 {
+			linkData := linkElem.AttrOr("data-linkdata", "")
+			if linkData != "" {
+				var data map[string]interface{}
+				err := json.Unmarshal([]byte(linkData), &data)
+				if err == nil && data["src"] != nil {
+					imgURL := data["src"].(string)
+					imageURLs = append(imageURLs, imgURL)
+				}
+			}
+		}
+
+		// 직접 이미지 태그 확인
+		img := imgContainer.Find("img").First()
+		if img.Length() > 0 {
+			imgURL := img.AttrOr("src", "")
+			if imgURL != "" {
+				imageURLs = append(imageURLs, imgURL)
+			}
+		}
+	})
+
+	// 이미지를 이미 찾았으면 다른 방법은 계속 진행
+
+	// 1. 스마트에디터 이미지 리소스 확인
+	contentArea.Find(".se-image-resource").Each(func(i int, img *goquery.Selection) {
+		// 상위 요소가 스티커 모듈이 아닌지 확인
+		if img.ParentsFiltered(".se-module-sticker").Length() > 0 {
+			return // 스티커 모듈 내부의 이미지는 건너뜀
+		}
+
+		imgURL := img.AttrOr("src", "")
+		if imgURL != "" {
+			imageURLs = append(imageURLs, imgURL)
+		}
+	})
+
+	// 2. se-component 이미지 확인
+	contentArea.Find(".se-component.se-image").Each(func(i int, component *goquery.Selection) {
+		// 이미지 모듈 찾기
+		img := component.Find(".se-module-image .se-image-resource").First()
+		if img.Length() > 0 {
+			imgURL := img.AttrOr("src", "")
+			if imgURL != "" {
+				imageURLs = append(imageURLs, imgURL)
+				return
+			}
+		}
+
+		// 링크 데이터 확인
+		link := component.Find(".se-module-image-link").First()
+		if link.Length() > 0 {
+			linkData := link.AttrOr("data-linkdata", "")
+			if linkData != "" {
+				var data map[string]interface{}
+				err := json.Unmarshal([]byte(linkData), &data)
+				if err == nil && data["src"] != nil {
+					imgURL := data["src"].(string)
+					imageURLs = append(imageURLs, imgURL)
+				}
+			}
+		}
+	})
+
+	// 3. 일반 이미지 확인
+	contentArea.Find("img").Each(func(i int, img *goquery.Selection) {
+		// 상위 요소가 스티커 관련 요소가 아닌지 확인
+		if img.ParentsFiltered("[class*='sticker']").Length() > 0 {
+			return // 스티커 관련 요소 내부의 이미지는 건너뜀
+		}
+
+		imgURL := img.AttrOr("src", "")
+		if imgURL == "" {
+			imgURL = img.AttrOr("data-src", "")
+		}
+		if imgURL == "" {
+			imgURL = img.AttrOr("data-lazy-src", "")
+		}
+
+		if imgURL != "" && (strings.HasPrefix(imgURL, "http://") || strings.HasPrefix(imgURL, "https://")) {
+			imageURLs = append(imageURLs, imgURL)
+		}
+	})
+
+	// 결과 설정
+	if len(imageURLs) > 0 {
+		result.FirstImageURL = imageURLs[0]
+		if strings.HasSuffix(result.FirstImageURL, "w80_blur") {
+			result.FirstImageURL = strings.Replace(result.FirstImageURL, "w80_blur", "w773", 1)
+		}
+
+		if len(imageURLs) > 1 {
+			result.LastImageURL = imageURLs[len(imageURLs)-1]
+			if strings.HasSuffix(result.LastImageURL, "w80_blur") {
+				result.LastImageURL = strings.Replace(result.LastImageURL, "w80_blur", "w773", 1)
+			}
+		} else {
+			result.LastImageURL = result.FirstImageURL
+		}
+	}
+}
+
+// extractFirstParagraph는 첫 번째와 마지막 문단과 인용구를 추출합니다
+func extractFirstParagraph(doc *goquery.Document, result *structure.CrawlResult) {
+	// 모든 문단을 저장할 슬라이스
+	var paragraphs []string
+
+	// 본문 영역 찾기
+	var contentArea *goquery.Selection
+
+	// 각 선택자별로 확인 및 내용 출력
+	for _, selector := range constants.CONTENT_SELECTORS {
+		selected := doc.Find(selector)
+		count := selected.Length()
+
+		if count > 0 {
+			contentArea = selected.First()
+			break
+		}
+	}
+
+	// 본문 영역을 찾지 못한 경우 전체 HTML 사용
+	if contentArea == nil || contentArea.Length() == 0 {
+		fmt.Printf("본문 영역을 찾지 못해 전체 HTML을 사용합니다.\n")
+		contentArea = doc.Selection
+	}
+
+	// 인용구 확인
+	var quotations []string
+
+	// 인용구 선택자 확인 (네이버 블로그 스마트에디터 패턴에 맞게 개선)
+	quotationSelectors := []string{
+		".se-quotation-container", // 스마트에디터 2.0 인용구
+		"blockquote",              // 일반 인용구
+	}
+
+	for _, selector := range quotationSelectors {
+		quotes := contentArea.Find(selector)
+
+		if quotes.Length() > 0 {
+			quotes.Each(func(i int, quote *goquery.Selection) {
+				// 텍스트 추출 (span 내부까지 확인)
+				text := ""
+
+				// 인용구 내부의 span 태그 확인 (색상 등 스타일 적용된 텍스트)
+				spans := quote.Find("span")
+				if spans.Length() > 0 {
+					spans.Each(func(j int, span *goquery.Selection) {
+						spanText := strings.TrimSpace(span.Text())
+						if spanText != "" && !strings.Contains(text, spanText) {
+							if text != "" {
+								text += " "
+							}
+							text += spanText
+						}
+					})
+				}
+
+				// span에서 텍스트를 찾지 못했으면 직접 텍스트 추출
+				if text == "" {
+					text = strings.TrimSpace(quote.Text())
+				}
+
+				// 텍스트 정리 (특수문자 제거)
+				text = cleanText(text)
+
+				if text != "" && len(text) > 5 {
+					quotations = append(quotations, text)
+				}
+			})
+		}
+
+		if len(quotations) > 0 {
+			break
+		}
+	}
+
+	// 일반 문단 확인
+	paragraphSelectors := []string{
+		".se-text-paragraph", // 스마트에디터 2.0 문단
+		".se-module-text p",  // 스마트에디터 모듈 내 문단
+		".post_ct p",         // 일반 모바일 블로그 문단
+		".sect_dsc p",        // 모바일 본문 문단
+		"p",                  // 일반 문단 태그
+	}
+
+	for _, selector := range paragraphSelectors {
+		paragraphElements := contentArea.Find(selector)
+		paragraphCount := paragraphElements.Length()
+
+		if paragraphCount > 0 {
+			paragraphElements.Each(func(i int, p *goquery.Selection) {
+				// 텍스트 추출 시 span 내부도 확인
+				text := ""
+				spans := p.Find("span")
+				if spans.Length() > 0 {
+					spans.Each(func(j int, span *goquery.Selection) {
+						spanText := strings.TrimSpace(span.Text())
+						if spanText != "" && !strings.Contains(text, spanText) {
+							if text != "" {
+								text += " "
+							}
+							text += spanText
+						}
+					})
+				}
+
+				// span에서 텍스트를 찾지 못했으면 직접 텍스트 추출
+				if text == "" {
+					text = strings.TrimSpace(p.Text())
+				}
+
+				// 텍스트 정리 (특수문자 제거)
+				text = cleanText(text)
+
+				if text != "" && len(text) > 5 {
+					paragraphs = append(paragraphs, text)
+				}
+			})
+		}
+
+		if len(paragraphs) > 0 {
+			fmt.Printf("적합한 문단을 %d개 찾았습니다!\n", len(paragraphs))
+			break
+		}
+	}
+
+	// 문단을 찾지 못한 경우 대체 방법 시도
+	if len(paragraphs) == 0 {
+		fmt.Printf("표준 선택자로 문단을 찾지 못했습니다. 다른 방법 시도 중...\n")
+
+		// 1. div 직접 검색
+		contentArea.Find("div.se-module-text").Each(func(i int, div *goquery.Selection) {
+			if i > 10 { // 처음 10개만 확인
+				return
+			}
+
+			// 먼저 span 내부 확인
+			var texts []string
+			div.Find("span").Each(func(j int, span *goquery.Selection) {
+				spanText := strings.TrimSpace(span.Text())
+				if spanText != "" && len(spanText) > 5 {
+					texts = append(texts, spanText)
+				}
+			})
+
+			text := strings.Join(texts, " ")
+
+			// span이 없거나 비어있으면 div 자체 텍스트 사용
+			if text == "" {
+				text = strings.TrimSpace(div.Text())
+			}
+
+			// 텍스트 정리
+			text = cleanText(text)
+
+			if text != "" && len(text) > 30 && len(text) < 500 {
+				fmt.Printf("DIV에서 가능한 문단 발견 (%d 바이트): %s...\n", len(text), text[:min(len(text), 100)])
+				paragraphs = append(paragraphs, text)
+			}
+		})
+	}
+
+	// 인용구와 문단 결합
+	var allTexts []string
+	allTexts = append(allTexts, paragraphs...)
+	allTexts = append(allTexts, quotations...)
+
+	// FirstParagraph 설정
+	if len(allTexts) > 0 {
+		result.FirstParagraph = allTexts[0]
+		fmt.Printf("첫 번째 문단 추출 (%d 바이트):\n%s\n", len(result.FirstParagraph), result.FirstParagraph)
+
+		// LastParagraph 설정
+		if len(allTexts) > 1 {
+			result.LastParagraph = allTexts[len(allTexts)-1]
+			fmt.Printf("마지막 문단 추출 (%d 바이트):\n%s\n", len(result.LastParagraph), result.LastParagraph)
+		} else {
+			result.LastParagraph = result.FirstParagraph
+		}
+	} else {
+		fmt.Printf("문단과 인용구를 모두 찾지 못했습니다.\n")
+	}
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/sh5080/ndns-go/pkg/services/internal/crawler"
 	constant "github.com/sh5080/ndns-go/pkg/types"
 	structure "github.com/sh5080/ndns-go/pkg/types/structures"
+	"github.com/sh5080/ndns-go/pkg/utils"
 )
 
 // DetectTextInPosts는 여러 포스트에서 동시에 협찬 관련 텍스트를 탐지합니다
@@ -45,6 +46,9 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 			default:
 				// 계속 진행
 			}
+			utils.DebugLog("포스트 날짜: %v\n", item.PostDate)
+			// 2025년 이후 포스트인지 확인
+			is2025OrLater := utils.IsAfter2025(item.PostDate)
 
 			// 블로그 포스트 초기화 (analyzer 패키지 사용)
 			blogPost := analyzer.CreateBlogPost(item)
@@ -57,39 +61,48 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 				analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
 			} else {
 				// 2. Description에서 스폰서 탐지 실패시 본문 크롤링
-				crawlResult, err := crawler.CrawlBlogPost(item.Link)
+				crawlResult, err := crawler.CrawlBlogPost(item.Link, is2025OrLater)
 				if err != nil {
 					fmt.Printf("[%d] 크롤링 실패: %v\n", index, err)
 				}
-				// 2-1. 협찬 도메인 확인 (이미지 URL과 스티커 URL 모두 확인)
+
+				// 본문 분석 순서:
+				// 1. 첫 이미지/스티커 URL 도메인 확인
+				// 2. 도메인이 협찬이 아니면 첫 이미지/스티커 OCR 분석
+				// 3. 첫 문단 분석
+				// 4. 2025년 이전 포스트만: 마지막 문단/스티커/이미지 분석
+
+				// 1. 첫 번째 이미지 URL과 스티커 URL 도메인 확인
 				foundSponsorDomain := false
 				var foundURL, domain string
 				sponsorType := structure.SponsorTypeImage
 
-				// 이미지 URL 확인
-				if foundDomain, matchedDomain := analyzer.CheckSponsorDomain(crawlResult.ImageURL, constant.SPONSOR_DOMAINS); foundDomain {
+				// 1-1. 첫 번째 이미지 URL 확인
+				utils.DebugLog("1-1. 첫 번째 이미지 URL 확인\n")
+				if foundDomain, matchedDomain := analyzer.CheckSponsorDomain(crawlResult.FirstImageURL, constant.SPONSOR_DOMAINS); foundDomain {
 					foundSponsorDomain = true
-					foundURL = crawlResult.ImageURL
+					foundURL = crawlResult.FirstImageURL
 					sponsorType = structure.SponsorTypeImage
 					domain = matchedDomain
 				}
 
-				// 스티커 URL 확인 (이미지 URL에서 발견되지 않은 경우)
-				if !foundSponsorDomain {
-					if foundDomain, matchedDomain := analyzer.CheckSponsorDomain(crawlResult.StickerURL, constant.SPONSOR_DOMAINS); foundDomain {
+				utils.DebugLog("1-2. 첫 번째 스티커 URL 확인\n")
+				// 1-2. 첫 번째 스티커 URL 확인 (첫 번째 이미지 URL에서 발견되지 않은 경우)
+				if !foundSponsorDomain && crawlResult.FirstStickerURL != "" {
+					if foundDomain, matchedDomain := analyzer.CheckSponsorDomain(crawlResult.FirstStickerURL, constant.SPONSOR_DOMAINS); foundDomain {
 						foundSponsorDomain = true
-						foundURL = crawlResult.StickerURL
+						foundURL = crawlResult.FirstStickerURL
 						sponsorType = structure.SponsorTypeSticker
 						domain = matchedDomain
 					}
 				}
 
-				// 협찬 도메인이 발견된 경우
+				// 1-3. 협찬 도메인이 발견된 경우
 				if foundSponsorDomain {
-					// analyzer 패키지 함수 사용
+					// 협찬 도메인이 발견되었으므로 바로 협찬으로 판단
 					blogPost = analyzer.CreateSponsoredBlogPost(
 						item,
-						1.0,
+						structure.Accuracy.Absolute,
 						foundURL,
 						structure.IndicatorTypeKeyword,
 						structure.PatternTypeNormal,
@@ -98,15 +111,12 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 					)
 
 					// 결과 저장 및 다른 고루틴에게 알림
-					fmt.Printf("[%d] 저장 직전 blogPost: Link=%s, IsSponsored=%v\n",
-						index, blogPost.NaverSearchItem.Link, blogPost.IsSponsored)
-					// 결과 저장
 					mu.Lock()
 					results[index] = blogPost
 					mu.Unlock()
 
 					// 높은 확률의 스폰서가 발견되면 다른 고루틴에게 알림
-					if blogPost.IsSponsored && blogPost.SponsorProbability >= structure.Accuracy.Exact {
+					if blogPost.IsSponsored && blogPost.SponsorProbability >= structure.Accuracy.Absolute {
 						select {
 						case <-doneCh:
 							// 이미 채널이 닫혀있으면 무시
@@ -117,41 +127,91 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 					}
 					return
 				}
-				// 본문 분석
-				isSponsored, probability, indicators = DetectSponsor(crawlResult.FirstParagraph, structure.SponsorTypeFirstParagraph)
-				if isSponsored {
-					//협찬 정보 업데이트
-					analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
-				} else {
-					// 3. 스티커 이미지 OCR 처리
-					if crawlResult.StickerURL != "" {
-						ocrText, err := ocrExtractor(crawlResult.StickerURL)
-						if err != nil {
-							fmt.Printf("%s", err.Error())
-						}
-						isSponsored, probability, indicators = DetectSponsor(ocrText, structure.SponsorTypeSticker)
-						if isSponsored {
-							//협찬 정보 업데이트
-							analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
-						}
-					}
 
-					// 4. 일반 이미지 OCR 처리
-					if !blogPost.IsSponsored && crawlResult.ImageURL != "" {
-						ocrText, err := ocrExtractor(crawlResult.ImageURL)
-						if err != nil {
-							fmt.Printf("%s", err.Error())
-						}
-						isSponsored, probability, indicators = DetectSponsor(ocrText, structure.SponsorTypeImage)
+				// 2. 도메인에서 협찬이 발견되지 않은 경우, 이미지/스티커 OCR 분석
+				// 2-1. 첫 번째 이미지 OCR 처리
+				if crawlResult.FirstImageURL != "" && !blogPost.IsSponsored {
+					utils.DebugLog("2-1. 첫 번째 이미지 OCR 처리\n")
+					ocrText, err := ocrExtractor(crawlResult.FirstImageURL)
+					if err != nil {
+						utils.DebugLog("첫 번째 이미지 OCR 오류: %s\n", err.Error())
+					} else {
+						isSponsored, probability, indicators := DetectSponsor(ocrText, structure.SponsorTypeImage)
 						if isSponsored {
 							//협찬 정보 업데이트
 							analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
 						}
 					}
 				}
-			}
 
-			// fmt.Printf("blogPost: %+v\n", blogPost)
+				// 2-2. 첫 번째 스티커 OCR 처리 (첫 번째 이미지에서 스폰서가 발견되지 않은 경우)
+				if crawlResult.FirstStickerURL != "" && !blogPost.IsSponsored {
+					utils.DebugLog("2-2. 첫 번째 스티커 OCR 처리\n")
+					ocrText, err := ocrExtractor(crawlResult.FirstStickerURL)
+					if err != nil {
+						utils.DebugLog("첫 번째 스티커 OCR 오류: %s\n", err.Error())
+					} else {
+						isSponsored, probability, indicators := DetectSponsor(ocrText, structure.SponsorTypeSticker)
+						if isSponsored {
+							//협찬 정보 업데이트
+							analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
+						}
+					}
+				}
+
+				// 3-1. 첫 번째 문단 분석 (이미지/스티커 OCR에서 스폰서가 발견되지 않은 경우)
+				if !blogPost.IsSponsored {
+					utils.DebugLog("3-1. 첫 번째 문단 분석\n")
+					isSponsored, probability, indicators := DetectSponsor(crawlResult.FirstParagraph, structure.SponsorTypeFirstParagraph)
+
+					if isSponsored {
+						//협찬 정보 업데이트
+						analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
+					} else if !is2025OrLater { // 2025년 이전 포스트만 추가 분석 수행
+						// 3-2. 마지막 문단 분석 (첫 문단과 다른 경우만)
+						utils.DebugLog("3-2. 마지막 문단 분석 (2025년 이전 포스트만)\n")
+						if crawlResult.LastParagraph != "" && crawlResult.LastParagraph != crawlResult.FirstParagraph {
+							isSponsored, probability, indicators = DetectSponsor(crawlResult.LastParagraph, structure.SponsorTypeLastParagraph)
+							if isSponsored {
+								//협찬 정보 업데이트
+								analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
+							}
+						}
+
+						// 4. 마지막 스티커 이미지 OCR 처리 (협찬이 발견되지 않은 경우)
+						utils.DebugLog("4-1. 마지막 스티커 이미지 OCR 처리 (2025년 이전 포스트만)\n")
+						if !blogPost.IsSponsored && crawlResult.LastStickerURL != "" && crawlResult.LastStickerURL != crawlResult.FirstStickerURL {
+							ocrText, err := ocrExtractor(crawlResult.LastStickerURL)
+							if err != nil {
+								utils.DebugLog("%s", err.Error())
+							} else {
+								isSponsored, probability, indicators = DetectSponsor(ocrText, structure.SponsorTypeSticker)
+								if isSponsored {
+									//협찬 정보 업데이트
+									analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
+								}
+							}
+						}
+
+						// 5. 마지막 이미지 OCR 처리 (협찬이 발견되지 않은 경우)
+						utils.DebugLog("4-2. 마지막 이미지 OCR 처리 (2025년 이전 포스트만)\n")
+						if !blogPost.IsSponsored && crawlResult.LastImageURL != "" && crawlResult.LastImageURL != crawlResult.FirstImageURL {
+							ocrText, err := ocrExtractor(crawlResult.LastImageURL)
+							if err != nil {
+								utils.DebugLog("%s", err.Error())
+							} else {
+								isSponsored, probability, indicators = DetectSponsor(ocrText, structure.SponsorTypeImage)
+								if isSponsored {
+									//협찬 정보 업데이트
+									analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
+								}
+							}
+						}
+					} else {
+						utils.DebugLog("2025년 이후 포스트이므로 마지막 문단/스티커/이미지 분석 건너뜀\n")
+					}
+				}
+			}
 			// 결과 저장
 			mu.Lock()
 			results[index] = blogPost
