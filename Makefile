@@ -16,7 +16,7 @@ build:
 	go build -ldflags "-X 'github.com/sh5080/ndns-go/pkg/controller.Version=$(VERSION)'" -o $(APP_NAME) $(MAIN_FILE)
 
 run:
-	go run $(MAIN_FILE)
+	APP_ENV=dev go run $(MAIN_FILE)
 
 run-prod:
 	./ndns-go
