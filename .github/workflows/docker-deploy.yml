@@ -11,10 +11,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Get public IP from EC2 tag
+        id: get_ip
+        run: |
+          IP=$(aws ec2 describe-instances \
+            --region ap-northeast-2 \
+            --filters "Name=tag:Name,Values=ndns-go" "Name=instance-state-name,Values=running" \
+            --query "Reservations[*].Instances[*].PublicIpAddress" \
+            --output text)
+          echo "PUBLIC_IP=$IP" >> $GITHUB_OUTPUT
+
       - name: Deploy to Server via SSH
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ secrets.SERVER_HOST }}
+          host: ${{ steps.get_ip.outputs.PUBLIC_IP }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_SSH_PORT }}
