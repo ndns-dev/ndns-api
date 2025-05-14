@@ -110,8 +110,13 @@ func UpdateBlogPostWithSponsorInfo(
 	isSponsored bool,
 	probability float64,
 	indicators []structure.SponsorIndicator,
+	errorMessage ...string,
 ) {
 	if !isSponsored {
+		// 에러 메시지가 제공된 경우 설정
+		if len(errorMessage) > 0 && errorMessage[0] != "" {
+			blogPost.Error = errorMessage[0]
+		}
 		return
 	}
 

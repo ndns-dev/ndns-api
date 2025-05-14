@@ -29,6 +29,7 @@ type BlogPost struct {
 	IsSponsored        bool               `json:"isSponsored"`
 	SponsorProbability float64            `json:"sponsorProbability"`
 	SponsorIndicators  []SponsorIndicator `json:"sponsorIndicators"`
+	Error              string             `json:"error,omitempty"`
 }
 
 type CrawlResult struct {

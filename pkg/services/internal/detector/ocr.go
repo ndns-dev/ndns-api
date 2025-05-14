@@ -121,13 +121,15 @@ func (o *OCRImpl) ExtractTextFromImage(imageURL string) (string, error) {
 	select {
 	case <-parentCtx.Done():
 		// 타임아웃 발생
-		fmt.Printf("상위 컨텍스트 타임아웃 (3초 초과): %v\n", parentCtx.Err())
-		return "[OCR 처리 시간 초과: 이미지 처리 건너뜀]", nil
+		timeoutErr := fmt.Sprintf("OCR 처리 시간 초과 (%s): %v", constants.TIMEOUT, parentCtx.Err())
+		fmt.Printf("상위 컨텍스트 타임아웃: %s\n", timeoutErr)
+		return "[" + timeoutErr + "]", nil
 	case result := <-resultCh:
 		// 결과 반환
 		if result.err != nil {
-			fmt.Printf("OCR 처리 실패: %v\n", result.err)
-			return "[OCR 처리 실패: 이미지에서 텍스트 추출 실패]", nil
+			errorMsg := fmt.Sprintf("OCR 처리 실패: %v", result.err)
+			fmt.Printf("%s\n", errorMsg)
+			return "[" + errorMsg + "]", nil
 		}
 
 		// OCR 결과 캐싱
