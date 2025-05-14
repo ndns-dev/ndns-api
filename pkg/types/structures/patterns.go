@@ -1,11 +1,11 @@
 package structure
 
-type PatternType int
+type PatternType string
 
 const (
-	PatternTypeSpecial PatternType = iota
-	PatternTypeExact
-	PatternTypeNormal
+	PatternTypeSpecial PatternType = "special"
+	PatternTypeExact   PatternType = "exact"
+	PatternTypeNormal  PatternType = "normal"
 )
 
 // SpecialCasePattern은 특수 스폰서 패턴의 구조를 정의합니다
@@ -74,7 +74,7 @@ var SPONSOR_KEYWORDS = map[string]float64{
 	"업체":    0.4,
 	"혜택":    0.2,
 	"제공":    0.4,
-	// ocr로 잘못 읽었지만 협찬 키워드
+	//ocr로 잘못 읽었지만 협찬 패턴
 	"업제": 0.4,
 	"입체": 0.4,
 }

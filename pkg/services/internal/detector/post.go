@@ -162,7 +162,7 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 				// 3-1. 첫 번째 문단 분석 (이미지/스티커 OCR에서 스폰서가 발견되지 않은 경우)
 				if !blogPost.IsSponsored {
 					utils.DebugLog("3-1. 첫 번째 문단 분석\n")
-					isSponsored, probability, indicators := DetectSponsor(crawlResult.FirstParagraph, structure.SponsorTypeFirstParagraph)
+					isSponsored, probability, indicators := DetectSponsor(crawlResult.FirstParagraph, structure.SponsorTypeParagraph)
 
 					if isSponsored {
 						//협찬 정보 업데이트
@@ -171,7 +171,7 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 						// 3-2. 마지막 문단 분석 (첫 문단과 다른 경우만)
 						utils.DebugLog("3-2. 마지막 문단 분석 (2025년 이전 포스트만)\n")
 						if crawlResult.LastParagraph != "" && crawlResult.LastParagraph != crawlResult.FirstParagraph {
-							isSponsored, probability, indicators = DetectSponsor(crawlResult.LastParagraph, structure.SponsorTypeLastParagraph)
+							isSponsored, probability, indicators = DetectSponsor(crawlResult.LastParagraph, structure.SponsorTypeParagraph)
 							if isSponsored {
 								//협찬 정보 업데이트
 								analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
