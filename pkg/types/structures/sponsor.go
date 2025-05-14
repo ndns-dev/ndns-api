@@ -15,13 +15,16 @@ const (
 	IndicatorTypeKeyword           IndicatorType = "keyword"
 )
 
-type SponsorType string
+// SponsorType은 협찬 유형을 정의합니다
+type SponsorType int
 
 const (
-	SponsorTypeDescription    SponsorType = "description"
-	SponsorTypeFirstParagraph SponsorType = "firstParagraph"
-	SponsorTypeImage          SponsorType = "image"
-	SponsorTypeSticker        SponsorType = "sticker"
+	SponsorTypeDescription    SponsorType = iota // 설명에서 발견
+	SponsorTypeFirstParagraph                    // 첫 문단에서 발견
+	SponsorTypeLastParagraph                     // 마지막 문단에서 발견
+	SponsorTypeImage                             // 이미지에서 발견
+	SponsorTypeSticker                           // 스티커에서 발견
+	SponsorTypeUnknown                           // 알 수 없는 유형
 )
 
 type SponsorSource struct {
