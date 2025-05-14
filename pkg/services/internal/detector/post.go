@@ -134,10 +134,14 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 					utils.DebugLog("2-1. 첫 번째 이미지 OCR 처리\n")
 					ocrText, err := ocrExtractor(crawlResult.FirstImageURL)
 					if err != nil {
+						errMsg := fmt.Sprintf("이미지 OCR 처리 오류: %s", err.Error())
 						utils.DebugLog("첫 번째 이미지 OCR 오류: %s\n", err.Error())
 						// 오류 메시지 저장
-						errMsg := fmt.Sprintf("이미지 OCR 처리 오류: %s", err.Error())
 						analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, false, 0, nil, errMsg)
+					} else if strings.Contains(ocrText, "context deadline exceeded") ||
+						strings.Contains(ocrText, "Get \"") {
+						// OCR 텍스트가 오류 메시지를 포함하는 경우 처리
+						analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, false, 0, nil, ocrText)
 					} else {
 						isSponsored, probability, indicators := DetectSponsor(ocrText, structure.SponsorTypeImage)
 						if isSponsored {
@@ -152,10 +156,14 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 					utils.DebugLog("2-2. 첫 번째 스티커 OCR 처리\n")
 					ocrText, err := ocrExtractor(crawlResult.FirstStickerURL)
 					if err != nil {
+						errMsg := fmt.Sprintf("스티커 OCR 처리 오류: %s", err.Error())
 						utils.DebugLog("첫 번째 스티커 OCR 오류: %s\n", err.Error())
 						// 오류 메시지 저장
-						errMsg := fmt.Sprintf("스티커 OCR 처리 오류: %s", err.Error())
 						analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, false, 0, nil, errMsg)
+					} else if strings.Contains(ocrText, "context deadline exceeded") ||
+						strings.Contains(ocrText, "Get \"") {
+						// OCR 텍스트가 오류 메시지를 포함하는 경우 처리
+						analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, false, 0, nil, ocrText)
 					} else {
 						isSponsored, probability, indicators := DetectSponsor(ocrText, structure.SponsorTypeSticker)
 						if isSponsored {
@@ -189,10 +197,14 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 						if !blogPost.IsSponsored && crawlResult.LastStickerURL != "" && crawlResult.LastStickerURL != crawlResult.FirstStickerURL {
 							ocrText, err := ocrExtractor(crawlResult.LastStickerURL)
 							if err != nil {
+								errMsg := fmt.Sprintf("마지막 스티커 OCR 처리 오류: %s", err.Error())
 								utils.DebugLog("%s", err.Error())
 								// 오류 메시지 저장
-								errMsg := fmt.Sprintf("마지막 스티커 OCR 처리 오류: %s", err.Error())
 								analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, false, 0, nil, errMsg)
+							} else if strings.Contains(ocrText, "context deadline exceeded") ||
+								strings.Contains(ocrText, "Get \"") {
+								// OCR 텍스트가 오류 메시지를 포함하는 경우 처리
+								analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, false, 0, nil, ocrText)
 							} else {
 								isSponsored, probability, indicators = DetectSponsor(ocrText, structure.SponsorTypeSticker)
 								if isSponsored {
@@ -207,10 +219,14 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 						if !blogPost.IsSponsored && crawlResult.LastImageURL != "" && crawlResult.LastImageURL != crawlResult.FirstImageURL {
 							ocrText, err := ocrExtractor(crawlResult.LastImageURL)
 							if err != nil {
+								errMsg := fmt.Sprintf("마지막 이미지 OCR 처리 오류: %s", err.Error())
 								utils.DebugLog("%s", err.Error())
 								// 오류 메시지 저장
-								errMsg := fmt.Sprintf("마지막 이미지 OCR 처리 오류: %s", err.Error())
 								analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, false, 0, nil, errMsg)
+							} else if strings.Contains(ocrText, "context deadline exceeded") ||
+								strings.Contains(ocrText, "Get \"") {
+								// OCR 텍스트가 오류 메시지를 포함하는 경우 처리
+								analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, false, 0, nil, ocrText)
 							} else {
 								isSponsored, probability, indicators = DetectSponsor(ocrText, structure.SponsorTypeImage)
 								if isSponsored {
