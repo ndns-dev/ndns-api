@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -176,7 +175,7 @@ func (o *OCRImpl) downloadImage(imageURL string) (string, error) {
 	// 내부 함수: 실제 요청 실행
 	doRequest := func(url string, timeout time.Duration) (*http.Response, error) {
 		// 타임아웃 컨텍스트 생성
-		ctx, cancel := context.WithTimeout(context.Background(), timeout*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 
 		// 응답 객체와 에러를 반환할 변수 선언
 		var resp *http.Response
@@ -188,7 +187,7 @@ func (o *OCRImpl) downloadImage(imageURL string) (string, error) {
 			headReq.Header.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
 
 			// HEAD 요청으로 이미지 크기 확인
-			client := &http.Client{Timeout: 2 * time.Second}
+			client := &http.Client{Timeout: 2 * timeout}
 			headResp, headErr := client.Do(headReq)
 
 			if headErr == nil && headResp.StatusCode == http.StatusOK {
@@ -222,7 +221,7 @@ func (o *OCRImpl) downloadImage(imageURL string) (string, error) {
 
 		// HTTP 클라이언트 생성
 		client := &http.Client{
-			Timeout: (timeout + 2) * time.Second,
+			Timeout: (timeout + 2) * timeout,
 		}
 
 		resp, err = client.Do(req)
@@ -377,172 +376,85 @@ func (o *OCRImpl) runOCR(ctx context.Context, imagePath string) (string, error) 
 	ocrCtx, cancel := context.WithTimeout(ctx, constants.TIMEOUT)
 	defer cancel()
 
-	// 명령 실행을 위한 채널
-	doneCh := make(chan struct {
-		output []byte
-		err    error
-	}, 1)
-
-	// 기본 시도
-	cmd := exec.CommandContext(ocrCtx,
-		"tesseract",
-		imagePath,
-		"stdout",
-		"-l", "kor",
-		"--psm", "6",
-		"--oem", "3",
-		"-c", "preserve_interword_spaces=1")
-
-	fmt.Printf("OCR 명령 실행: %s\n", cmd.String())
-
-	// 비동기로 명령 실행
-	go func() {
-		output, err := cmd.CombinedOutput()
-		doneCh <- struct {
-			output []byte
-			err    error
-		}{output, err}
-	}()
-
-	// 타임아웃 또는 결과 대기
-	var output []byte
-	var err error
-	select {
-	case <-ctx.Done():
-		cancel() // 확실히 취소
-		fmt.Printf("상위 컨텍스트 취소됨: %v\n", ctx.Err())
-		return "[OCR 타임아웃: 상위 컨텍스트 취소]", nil
-	case <-ocrCtx.Done():
-		// kill 프로세스
-		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
-		}
-		fmt.Printf("OCR 컨텍스트 취소됨: %v\n", ocrCtx.Err())
-		return "[OCR 타임아웃: 처리 시간 초과]", nil
-	case result := <-doneCh:
-		output, err = result.output, result.err
-	}
-
-	execTime := time.Since(startTime)
-	if err != nil {
-		fmt.Printf("OCR 실행 실패 (소요시간: %v): %v\n", execTime, err)
-	} else {
-		fmt.Printf("OCR 실행 완료 (소요시간: %v)\n", execTime)
-	}
-
-	// 컨텍스트 상태 다시 확인
-	if ctx.Err() != nil {
-		fmt.Printf("OCR 처리 후 상위 컨텍스트 취소 확인: %v\n", ctx.Err())
-		return "[OCR 타임아웃: 처리 시간 초과]", nil
-	}
-
-	// OCR 결과 정리
-	textDetected := strings.TrimSpace(string(output))
-	textLength := len(textDetected)
-
-	// 결과 요약 (디버깅용)
-	if textLength > 100 {
-		fmt.Printf("OCR 결과: %s... (총 %d자)\n", textDetected[:100], textLength)
-	} else {
-		fmt.Printf("OCR 결과: %s (총 %d자)\n", textDetected, textLength)
-	}
+	// 기본 시도 (PSM 6)
+	fmt.Printf("OCR 처리 시작 (PSM 6)...\n")
+	textDetected := utils.RunTesseractWithContext(ocrCtx, imagePath)
 
 	// 결과가 없으면 다른 psm 모드 시도
-	if textDetected == "" || strings.Contains(textDetected, "Estimating") {
-		fmt.Printf("OCR 결과 여전히 미흡, 다른 PSM 모드 시도\n")
-
+	if textDetected == "" && ctx.Err() == nil {
+		fmt.Printf("OCR 결과 없음, 다른 PSM 모드 시도\n")
 		psm_modes := []string{"7", "8", "10", "11", "12"}
 
 		for _, psm := range psm_modes {
 			// 컨텍스트가 취소되었는지 확인
 			if ctx.Err() != nil {
-				fmt.Printf("대체 OCR 시도 전 컨텍스트 취소 확인: %v\n", ctx.Err())
-				return "[OCR 타임아웃: 처리 시간 초과]", nil
+				break
 			}
 
-			// 각 PSM 모드별 타임아웃 컨텍스트
-			psmCtx, psmCancel := context.WithTimeout(ctx, constants.TIMEOUT)
+			fmt.Printf("대체 OCR 모드 시도 (PSM %s)...\n", psm)
 
-			// 명령 실행을 위한 채널
-			psmDoneCh := make(chan struct {
-				output []byte
-				err    error
-			}, 1)
+			// 대체 OCR 실행
+			altText := utils.RunTesseractWithContext(ocrCtx, imagePath, psm)
+			fmt.Printf("대체 OCR(PSM %s) 실행 완료\n", psm)
 
-			altStartTime := time.Now()
-			cmdAlt := exec.CommandContext(psmCtx,
-				"tesseract",
-				imagePath,
-				"stdout",
-				"-l", "kor",
-				"--psm", psm)
-
-			fmt.Printf("대체 OCR 명령 실행 (PSM %s): %s\n", psm, cmdAlt.String())
-
-			// 비동기로 명령 실행
-			go func() {
-				output, err := cmdAlt.CombinedOutput()
-				psmDoneCh <- struct {
-					output []byte
-					err    error
-				}{output, err}
-			}()
-
-			// 타임아웃 또는 결과 대기
-			var outputAlt []byte
-			var cmdErr error
-			select {
-			case <-ctx.Done():
-				psmCancel()
-				if cmdAlt.Process != nil {
-					_ = cmdAlt.Process.Kill()
-				}
-				fmt.Printf("대체 OCR(PSM %s) 상위 컨텍스트 취소: %v\n", psm, ctx.Err())
-				continue
-			case <-psmCtx.Done():
-				if cmdAlt.Process != nil {
-					_ = cmdAlt.Process.Kill()
-				}
-				fmt.Printf("대체 OCR(PSM %s) 타임아웃: %v\n", psm, psmCtx.Err())
-				psmCancel()
-				continue
-			case result := <-psmDoneCh:
-				outputAlt, cmdErr = result.output, result.err
-			}
-
-			psmCancel() // 컨텍스트 취소
-			altExecTime := time.Since(altStartTime)
-
-			if cmdErr != nil {
-				fmt.Printf("대체 OCR(PSM %s) 실행 실패 (소요시간: %v): %v\n", psm, altExecTime, cmdErr)
-			} else {
-				fmt.Printf("대체 OCR(PSM %s) 실행 완료 (소요시간: %v)\n", psm, altExecTime)
-			}
-
-			altText := strings.TrimSpace(string(outputAlt))
-			altTextLength := len(altText)
-
-			if altText != "" && !strings.Contains(altText, "Estimating") {
+			// 결과가 있으면 해당 결과 사용하고 루프 종료
+			if altText != "" {
 				textDetected = altText
-				fmt.Printf("PSM %s에서 텍스트 감지됨 (총 %d자)\n", psm, altTextLength)
+				fmt.Printf("PSM %s에서 텍스트 감지됨 (총 %d자)\n", psm, len(altText))
 				break
 			}
 		}
 	}
 
-	// 최종 컨텍스트 확인
+	// 컨텍스트 취소 확인 (상위 컨텍스트의 취소 여부만 확인)
 	if ctx.Err() != nil {
-		fmt.Printf("OCR 완료 후 최종 컨텍스트 취소 확인: %v\n", ctx.Err())
-		return "[OCR 타임아웃: 처리 시간 초과]", nil
+		fmt.Printf("상위 컨텍스트 취소됨: %v\n", ctx.Err())
+		return "context deadline exceeded", nil
 	}
 
-	// 디버그 메시지만 있고 실제 텍스트가 없는 경우
-	if textDetected == "" || (strings.Contains(textDetected, "Estimating") && len(textDetected) < 100) {
-		// 빈 문자열 대신 기본값 반환
+	// 텍스트가 없는 경우
+	if textDetected == "" {
 		fmt.Printf("최종 OCR 결과: 인식 불가 (총 실행 시간: %v)\n", time.Since(startTime))
 		return "[OCR 인식 불가: 이미지에서 텍스트 추출 실패]", nil
 	}
 
 	fmt.Printf("최종 OCR 결과: 성공 (총 실행 시간: %v)\n", time.Since(startTime))
-	return textDetected[:min(100, len(textDetected))], nil
+
+	// 결과 정리 작업은 별도의 goroutine으로 처리하여 빠르게 반환
+	resultCh := make(chan string, 1)
+
+	go func() {
+		// 자주 발생하는 경고 메시지 제거
+		warningText := "Warning: Invalid resolution 0 dpi. Using 70 instead"
+		if strings.Contains(textDetected, warningText) {
+			textDetected = strings.ReplaceAll(textDetected, warningText, "")
+		}
+
+		// 모든 공백문자 처리: 줄바꿈과 공백 제거
+		textDetected = strings.ReplaceAll(textDetected, "\n", "")
+		textDetected = strings.ReplaceAll(textDetected, " ", "")
+		textDetected = strings.TrimSpace(textDetected)
+
+		// 로깅
+		fmt.Printf("변환된 OCR 텍스트: %s\n", textDetected)
+
+		// 결과가 너무 길면 잘라서 반환
+		if len(textDetected) > 100 {
+			resultCh <- textDetected[:100]
+		} else {
+			resultCh <- textDetected
+		}
+	}()
+
+	// 최대 50ms 내에 정리 작업 완료되지 않으면 원본 결과 반환
+	select {
+	case result := <-resultCh:
+		return result, nil
+	case <-time.After(50 * time.Millisecond):
+		fmt.Println("텍스트 정리 시간 초과: 원본 텍스트 반환")
+		if len(textDetected) > 100 {
+			return textDetected[:100], nil
+		}
+		return textDetected, nil
+	}
 }
