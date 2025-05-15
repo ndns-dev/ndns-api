@@ -44,6 +44,7 @@ func CreateSponsoredBlogPost(
 		IsSponsored:        true,
 		SponsorProbability: probability,
 		SponsorIndicators:  []structure.SponsorIndicator{indicator},
+		Error:              "",
 	}
 }
 
@@ -123,6 +124,7 @@ func UpdateBlogPostWithSponsorInfo(
 	blogPost.IsSponsored = isSponsored
 	blogPost.SponsorProbability = probability
 	blogPost.SponsorIndicators = indicators
+	blogPost.Error = "" // 협찬이 확인된 경우 에러 필드 초기화
 }
 
 // 이미지 URL에서 협찬 도메인을 확인하는 함수
