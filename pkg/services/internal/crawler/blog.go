@@ -280,6 +280,9 @@ func extractFirstImageOnly(doc *goquery.Document, result *structure.CrawlResult)
 		// 마지막 이미지는 수집하지 않음 (2025년 이후 포스트)
 		result.LastImageURL = ""
 	}
+	if strings.HasSuffix(result.FirstImageURL, "w80_blur") {
+		result.FirstImageURL = strings.Replace(result.FirstImageURL, "w80_blur", "w773", 1)
+	}
 }
 
 // extractFirstParagraphOnly는 첫 번째 문단만 추출합니다 (2025년 이후 포스트용)
@@ -809,10 +812,17 @@ func extractFirstParagraph(doc *goquery.Document, result *structure.CrawlResult)
 		result.FirstParagraph = allTexts[0]
 		fmt.Printf("첫 번째 문단 추출 (%d 바이트):\n%s\n", len(result.FirstParagraph), result.FirstParagraph)
 
-		// LastParagraph 설정
+		// LastParagraph 설정 - 최대 3개의 마지막 문단을 합침
 		if len(allTexts) > 1 {
-			result.LastParagraph = allTexts[len(allTexts)-1]
-			fmt.Printf("마지막 문단 추출 (%d 바이트):\n%s\n", len(result.LastParagraph), result.LastParagraph)
+			lastIndex := len(allTexts) - 1
+			startIndex := max(0, lastIndex-2) // 마지막 3개 문단의 시작 인덱스
+
+			var lastParagraphs []string
+			for i := startIndex; i <= lastIndex; i++ {
+				lastParagraphs = append(lastParagraphs, allTexts[i])
+			}
+
+			result.LastParagraph = strings.Join(lastParagraphs, " ")
 		} else {
 			result.LastParagraph = result.FirstParagraph
 		}
