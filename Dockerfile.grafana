@@ -1,0 +1,11 @@
+FROM grafana/grafana:latest
+
+# Grafana 설정 복사
+COPY grafana/provisioning /etc/grafana/provisioning
+
+# 환경 변수 설정
+ENV GF_SECURITY_ADMIN_USER=admin \
+    GF_SECURITY_ADMIN_PASSWORD=admin \
+    GF_USERS_ALLOW_SIGN_UP=false \
+    GF_SERVER_ROOT_URL=https://metrics.ndns.site \
+    GF_SERVER_DOMAIN=metrics.ndns.site

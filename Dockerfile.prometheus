@@ -1,0 +1,7 @@
+FROM prom/prometheus:latest
+
+# 설정 파일 복사
+COPY prometheus.yml /etc/prometheus/prometheus.yml
+
+# 명령 설정
+CMD ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus"]

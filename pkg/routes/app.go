@@ -9,4 +9,7 @@ import (
 func SetupAppRoutes(app *fiber.App) {
 	// 상태 확인 API
 	app.Get("/health", controller.Health())
+
+	// 메트릭 API
+	app.Get("/metrics", controller.Metrics())
 }
