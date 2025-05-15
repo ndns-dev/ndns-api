@@ -285,8 +285,10 @@ func extractFirstImageOnly(doc *goquery.Document, result *structure.CrawlResult)
 	}
 }
 
-// extractFirstParagraphOnly는 첫 번째 문단만 추출합니다 (2025년 이후 포스트용)
-func extractFirstParagraphOnly(doc *goquery.Document, result *structure.CrawlResult) {
+// extractCommonParagraphs는 HTML 문서에서 문단을 추출하는 공통 함수입니다
+// maxParagraphs가 양수일 경우 처음부터 최대 maxParagraphs개만 가져오고
+// maxParagraphs가 0일 경우 모든 문단을 가져옵니다
+func extractCommonParagraphs(doc *goquery.Document, maxParagraphs int) []string {
 	// 모든 문단을 저장할 슬라이스
 	var paragraphs []string
 
@@ -314,27 +316,103 @@ func extractFirstParagraphOnly(doc *goquery.Document, result *structure.CrawlRes
 		"p",                  // 일반 문단 태그
 	}
 
-	// 첫 3개의 의미 있는 문단 찾기
+	// 문단 찾기
 	for _, selector := range paragraphSelectors {
-		if len(paragraphs) >= 3 {
+		if maxParagraphs > 0 && len(paragraphs) >= maxParagraphs {
 			break
 		}
 
 		paragraphElements := contentArea.Find(selector)
 		paragraphElements.Each(func(i int, p *goquery.Selection) {
-			if len(paragraphs) >= 3 {
+			if maxParagraphs > 0 && len(paragraphs) >= maxParagraphs {
 				return
 			}
 
-			// 텍스트 추출
-			text := strings.TrimSpace(p.Text())
+			// 텍스트 추출 시 span 내부도 확인
+			text := ""
+			spans := p.Find("span")
+			if spans.Length() > 0 {
+				spans.Each(func(j int, span *goquery.Selection) {
+					spanText := strings.TrimSpace(span.Text())
+					if spanText != "" && !strings.Contains(text, spanText) {
+						if text != "" {
+							text += " "
+						}
+						text += spanText
+					}
+				})
+			}
+
+			// span에서 텍스트를 찾지 못했으면 직접 텍스트 추출
+			if text == "" {
+				text = strings.TrimSpace(p.Text())
+			}
+
+			// 텍스트 정리 (특수문자 제거)
 			text = cleanText(text)
 
-			if text != "" && len(text) > 10 {
+			if text != "" && len(text) > 5 {
+				paragraphs = append(paragraphs, text)
+			}
+		})
+
+		// 첫 번째 선택자에서 일치하는 문단을 찾으면 다른 선택자는 확인하지 않음
+		// 그러나 모든 문단을 가져오는 경우는 계속 진행
+		if len(paragraphs) > 0 && maxParagraphs > 0 && maxParagraphs <= 3 {
+			break
+		}
+	}
+
+	// 문단을 찾지 못한 경우 대체 방법 시도
+	if len(paragraphs) == 0 {
+		// div 직접 검색
+		contentArea.Find("div.se-module-text").Each(func(i int, div *goquery.Selection) {
+			if i > 10 || (maxParagraphs > 0 && len(paragraphs) >= maxParagraphs) { // 처음 10개만 확인
+				return
+			}
+
+			// 먼저 span 내부 확인
+			var texts []string
+			div.Find("span").Each(func(j int, span *goquery.Selection) {
+				spanText := strings.TrimSpace(span.Text())
+				if spanText != "" && len(spanText) > 5 {
+					texts = append(texts, spanText)
+				}
+			})
+
+			text := strings.Join(texts, " ")
+
+			// span이 없거나 비어있으면 div 자체 텍스트 사용
+			if text == "" {
+				text = strings.TrimSpace(div.Text())
+			}
+
+			// 텍스트 정리
+			text = cleanText(text)
+
+			if text != "" && len(text) > 30 && len(text) < 500 {
 				paragraphs = append(paragraphs, text)
 			}
 		})
 	}
+
+	return paragraphs
+}
+
+// extractLastParagraphs는 주어진 문단 배열에서 마지막 maxParagraphs개의 문단을 반환합니다
+func extractLastParagraphs(paragraphs []string, maxParagraphs int) []string {
+	if len(paragraphs) == 0 {
+		return []string{}
+	}
+
+	startIndex := max(0, len(paragraphs)-maxParagraphs)
+	return paragraphs[startIndex:]
+}
+
+// extractFirstParagraphOnly는 첫 번째 문단만 추출합니다 (2025년 이후 포스트용)
+func extractFirstParagraphOnly(doc *goquery.Document, result *structure.CrawlResult) {
+	// 최대 3개의 문단 추출
+	paragraphs := extractCommonParagraphs(doc, 3)
 
 	// FirstParagraph 설정 - 문단 병합
 	if len(paragraphs) > 0 {
@@ -640,28 +718,8 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 
 // extractFirstParagraph는 첫 번째와 마지막 문단과 인용구를 추출합니다
 func extractFirstParagraph(doc *goquery.Document, result *structure.CrawlResult) {
-	// 모든 문단을 저장할 슬라이스
-	var paragraphs []string
-
-	// 본문 영역 찾기
-	var contentArea *goquery.Selection
-
-	// 각 선택자별로 확인 및 내용 출력
-	for _, selector := range constants.CONTENT_SELECTORS {
-		selected := doc.Find(selector)
-		count := selected.Length()
-
-		if count > 0 {
-			contentArea = selected.First()
-			break
-		}
-	}
-
-	// 본문 영역을 찾지 못한 경우 전체 HTML 사용
-	if contentArea == nil || contentArea.Length() == 0 {
-		fmt.Printf("본문 영역을 찾지 못해 전체 HTML을 사용합니다.\n")
-		contentArea = doc.Selection
-	}
+	// 모든 문단 추출
+	paragraphs := extractCommonParagraphs(doc, 0) // 0은 모든 문단을 의미
 
 	// 인용구 확인
 	var quotations []string
@@ -670,6 +728,20 @@ func extractFirstParagraph(doc *goquery.Document, result *structure.CrawlResult)
 	quotationSelectors := []string{
 		".se-quotation-container", // 스마트에디터 2.0 인용구
 		"blockquote",              // 일반 인용구
+	}
+
+	var contentArea *goquery.Selection
+	for _, selector := range constants.CONTENT_SELECTORS {
+		selected := doc.Find(selector)
+		if selected.Length() > 0 {
+			contentArea = selected.First()
+			break
+		}
+	}
+
+	// 본문 영역을 찾지 못한 경우 전체 HTML 사용
+	if contentArea == nil || contentArea.Length() == 0 {
+		contentArea = doc.Selection
 	}
 
 	for _, selector := range quotationSelectors {
@@ -713,120 +785,23 @@ func extractFirstParagraph(doc *goquery.Document, result *structure.CrawlResult)
 		}
 	}
 
-	// 일반 문단 확인
-	paragraphSelectors := []string{
-		".se-text-paragraph", // 스마트에디터 2.0 문단
-		".se-module-text p",  // 스마트에디터 모듈 내 문단
-		".post_ct p",         // 일반 모바일 블로그 문단
-		".sect_dsc p",        // 모바일 본문 문단
-		"p",                  // 일반 문단 태그
-	}
-
-	for _, selector := range paragraphSelectors {
-		paragraphElements := contentArea.Find(selector)
-		paragraphCount := paragraphElements.Length()
-
-		if paragraphCount > 0 {
-			paragraphElements.Each(func(i int, p *goquery.Selection) {
-				// 텍스트 추출 시 span 내부도 확인
-				text := ""
-				spans := p.Find("span")
-				if spans.Length() > 0 {
-					spans.Each(func(j int, span *goquery.Selection) {
-						spanText := strings.TrimSpace(span.Text())
-						if spanText != "" && !strings.Contains(text, spanText) {
-							if text != "" {
-								text += " "
-							}
-							text += spanText
-						}
-					})
-				}
-
-				// span에서 텍스트를 찾지 못했으면 직접 텍스트 추출
-				if text == "" {
-					text = strings.TrimSpace(p.Text())
-				}
-
-				// 텍스트 정리 (특수문자 제거)
-				text = cleanText(text)
-
-				if text != "" && len(text) > 5 {
-					paragraphs = append(paragraphs, text)
-				}
-			})
-		}
-
-		if len(paragraphs) > 0 {
-			fmt.Printf("적합한 문단을 %d개 찾았습니다!\n", len(paragraphs))
-			break
-		}
-	}
-
-	// 문단을 찾지 못한 경우 대체 방법 시도
-	if len(paragraphs) == 0 {
-		fmt.Printf("표준 선택자로 문단을 찾지 못했습니다. 다른 방법 시도 중...\n")
-
-		// 1. div 직접 검색
-		contentArea.Find("div.se-module-text").Each(func(i int, div *goquery.Selection) {
-			if i > 10 { // 처음 10개만 확인
-				return
-			}
-
-			// 먼저 span 내부 확인
-			var texts []string
-			div.Find("span").Each(func(j int, span *goquery.Selection) {
-				spanText := strings.TrimSpace(span.Text())
-				if spanText != "" && len(spanText) > 5 {
-					texts = append(texts, spanText)
-				}
-			})
-
-			text := strings.Join(texts, " ")
-
-			// span이 없거나 비어있으면 div 자체 텍스트 사용
-			if text == "" {
-				text = strings.TrimSpace(div.Text())
-			}
-
-			// 텍스트 정리
-			text = cleanText(text)
-
-			if text != "" && len(text) > 30 && len(text) < 500 {
-				fmt.Printf("DIV에서 가능한 문단 발견 (%d 바이트): %s...\n", len(text), text[:min(len(text), 100)])
-				paragraphs = append(paragraphs, text)
-			}
-		})
-	}
-
 	// 인용구와 문단 결합
 	var allTexts []string
 	allTexts = append(allTexts, paragraphs...)
 	allTexts = append(allTexts, quotations...)
 
-	// FirstParagraph 설정
+	// FirstParagraph 설정 - 첫 3개 문단
 	if len(allTexts) > 0 {
 		// 첫 번째 문단 - 최대 3개의 문단 병합
-		endIndex := min(3, len(allTexts)) - 1
-
-		var firstParagraphs []string
-		for i := 0; i <= endIndex; i++ {
-			firstParagraphs = append(firstParagraphs, allTexts[i])
+		firstParagraphs := allTexts
+		if len(allTexts) > 3 {
+			firstParagraphs = allTexts[:3]
 		}
-
 		result.FirstParagraph = strings.Join(firstParagraphs, " ")
-		fmt.Printf("첫 번째 문단 추출 (%d 바이트):\n%s\n", len(result.FirstParagraph), result.FirstParagraph)
 
-		// LastParagraph 설정 - 최대 3개의 마지막 문단을 합침
+		// LastParagraph 설정 - 마지막 3개 문단
 		if len(allTexts) > 1 {
-			lastIndex := len(allTexts) - 1
-			startIndex := max(0, lastIndex-2) // 마지막 3개 문단의 시작 인덱스
-
-			var lastParagraphs []string
-			for i := startIndex; i <= lastIndex; i++ {
-				lastParagraphs = append(lastParagraphs, allTexts[i])
-			}
-
+			lastParagraphs := extractLastParagraphs(allTexts, 3)
 			result.LastParagraph = strings.Join(lastParagraphs, " ")
 		} else {
 			result.LastParagraph = result.FirstParagraph
