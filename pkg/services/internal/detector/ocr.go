@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/sh5080/ndns-go/pkg/configs"
 	_interface "github.com/sh5080/ndns-go/pkg/interfaces"
@@ -38,7 +39,12 @@ func NewOCRService() _interface.OCRService {
 
 // ExtractTextFromImage는 이미지 URL에서 텍스트를 추출합니다
 func (o *OCRImpl) ExtractTextFromImage(imageURL string) (string, error) {
+	// 시작 시간 기록 (메트릭용)
+	startTime := time.Now()
+	serviceType := "image_ocr"
+
 	if imageURL == "" {
+		utils.RecordError(serviceType, "empty_url")
 		return "", fmt.Errorf("이미지 URL이 비어 있습니다")
 	}
 
@@ -51,6 +57,8 @@ func (o *OCRImpl) ExtractTextFromImage(imageURL string) (string, error) {
 	if o.ocrRepo != nil {
 		cache, err := o.ocrRepo.GetOCRCache(imageURL)
 		if err == nil && cache != nil && cache.TextDetected != "" {
+			// 캐시 히트 메트릭 기록
+			utils.Info(serviceType, "캐시 히트: %s", imageURL)
 			return cache.TextDetected, nil
 		}
 	}
@@ -67,28 +75,19 @@ func (o *OCRImpl) ExtractTextFromImage(imageURL string) (string, error) {
 
 	// 비동기로 이미지 다운로드 및 OCR 처리
 	go func() {
-		// 이미지 다운로드 (상위 컨텍스트 전달)
+		// 이미지 다운로드
+		utils.Info(serviceType, "이미지 다운로드 시작: %s", imageURL)
 		tempFile, err := o.downloadImage(imageURL)
 		if err != nil {
-			select {
-			case <-parentCtx.Done():
-				// 이미 상위 컨텍스트가 취소된 경우 응답 전송 생략
-				return
-			default:
-				resultCh <- struct {
-					text string
-					err  error
-				}{"", fmt.Errorf("이미지 다운로드 실패: %v", err)}
-			}
+			utils.Error(serviceType, "이미지 다운로드 실패 [URL: %s]: %v", imageURL, err)
+			utils.RecordError(serviceType, "download_failed")
+			resultCh <- struct {
+				text string
+				err  error
+			}{"", err}
 			return
 		}
-
-		// tempFile이 생성되었으면 처리 완료 후 삭제
-		defer func() {
-			if tempFile != "" {
-				os.Remove(tempFile) // 임시 파일 정리
-			}
-		}()
+		defer os.Remove(tempFile) // 임시 파일 정리
 
 		// 상위 컨텍스트가 취소되었는지 확인
 		select {
@@ -100,7 +99,7 @@ func (o *OCRImpl) ExtractTextFromImage(imageURL string) (string, error) {
 		}
 
 		// OCR 실행 (상위 컨텍스트 전달)
-		textDetected, err := o.runOCR(parentCtx, tempFile)
+		textDetected, err := o.runOCR(parentCtx, tempFile, imageURL)
 
 		// 상위 컨텍스트가 취소되었는지 다시 확인
 		select {
@@ -121,13 +120,31 @@ func (o *OCRImpl) ExtractTextFromImage(imageURL string) (string, error) {
 	case <-parentCtx.Done():
 		// 타임아웃 발생
 		timeoutErr := fmt.Sprintf("OCR 처리 시간 초과 (%s): %v", constants.TIMEOUT, parentCtx.Err())
-		fmt.Printf("상위 컨텍스트 타임아웃: %s\n", timeoutErr)
+		utils.Error(serviceType, "타임아웃 [URL: %s]: %s", imageURL, timeoutErr)
+		utils.RecordError(serviceType, "timeout")
+
+		// OCR 오류 로그 데이터 저장
+		utils.OCRErrorLog("TIMEOUT", imageURL, timeoutErr)
+
 		return "[" + timeoutErr + "]", nil
 	case result := <-resultCh:
+		// 총 처리 시간 기록 (메트릭용)
+		duration := time.Since(startTime).Seconds()
+		// 메트릭 관련 로그를 명확하게 추가
+		fmt.Printf("OCR 메트릭 기록: ndns_ocr_processing_time_seconds %.2f초\n", duration)
+		// 메트릭 기록 - 별도 함수를 사용하여 확실히 실행되도록
+		utils.RecordOcrProcessingTime(duration)
+		utils.Info(serviceType, "OCR 처리 완료 - 소요 시간: %.2f초", duration)
+
 		// 결과 반환
 		if result.err != nil {
 			errorMsg := fmt.Sprintf("OCR 처리 실패: %v", result.err)
-			fmt.Printf("%s\n", errorMsg)
+			utils.Error(serviceType, "처리 실패 [URL: %s]: %s", imageURL, errorMsg)
+			utils.RecordError(serviceType, "processing_failed")
+
+			// OCR 오류 로그 데이터 저장
+			utils.OCRErrorLog("PROCESSING_FAILED", imageURL, result.err.Error())
+
 			return "[" + errorMsg + "]", nil
 		}
 
@@ -360,11 +377,12 @@ func (o *OCRImpl) downloadImage(imageURL string) (string, error) {
 	return tempFilePath, nil
 }
 
-// runOCR은 이미지 파일에서 텍스트를 추출합니다
-func (o *OCRImpl) runOCR(ctx context.Context, imagePath string) (string, error) {
+// runOCR은 Tesseract를 사용하여 OCR 처리를 수행합니다
+func (o *OCRImpl) runOCR(ctx context.Context, imagePath string, imageURL string) (string, error) {
 	// OCR 디버깅용
 	fmt.Printf("OCR 실행 시작 - 이미지 경로: %s\n", imagePath)
 	startTime := time.Now()
+	serviceType := "tesseract_ocr"
 
 	// 이미지 형식 확인 - 파일 시그니처 체크
 	if utils.IsGifImage(imagePath) {
@@ -388,6 +406,8 @@ func (o *OCRImpl) runOCR(ctx context.Context, imagePath string) (string, error) 
 		for _, psm := range psm_modes {
 			// 컨텍스트가 취소되었는지 확인
 			if ctx.Err() != nil {
+				utils.RecordError(serviceType, "context_cancelled")
+				utils.Error(serviceType, "컨텍스트 취소됨 (PSM %s): %v", psm, ctx.Err())
 				break
 			}
 
@@ -409,14 +429,31 @@ func (o *OCRImpl) runOCR(ctx context.Context, imagePath string) (string, error) 
 	// 컨텍스트 취소 확인 (상위 컨텍스트의 취소 여부만 확인)
 	if ctx.Err() != nil {
 		fmt.Printf("상위 컨텍스트 취소됨: %v\n", ctx.Err())
+		utils.RecordError(serviceType, "context_deadline_exceeded")
+		utils.Error(serviceType, "Tesseract OCR 처리 중 컨텍스트 취소됨: %v [이미지: %s]", ctx.Err(), imagePath)
+
+		// OCR 오류 로그 데이터 저장
+		utils.OCRErrorLog("CONTEXT_DEADLINE_EXCEEDED", imageURL, ctx.Err().Error())
+
 		return "context deadline exceeded", nil
 	}
 
 	// 텍스트가 없는 경우
 	if textDetected == "" {
 		fmt.Printf("최종 OCR 결과: 인식 불가 (총 실행 시간: %v)\n", time.Since(startTime))
+		utils.RecordError(serviceType, "no_text_detected")
+		utils.Error(serviceType, "OCR 인식 불가: 텍스트 추출 실패 [이미지: %s]", imagePath)
+
+		// OCR 오류 로그 데이터 저장
+		utils.OCRErrorLog("NO_TEXT_DETECTED", imageURL, "텍스트 추출 실패")
+
 		return "[OCR 인식 불가: 이미지에서 텍스트 추출 실패]", nil
 	}
+
+	// OCR 처리 시간 측정 완료
+	ocrDuration := time.Since(startTime).Seconds()
+	fmt.Printf("OCR 엔진 처리 메트릭 기록: ndns_ocr_processing_time_seconds %.2f초\n", ocrDuration)
+	utils.RecordOcrProcessingTime(ocrDuration)
 
 	fmt.Printf("최종 OCR 결과: 성공 (총 실행 시간: %v)\n", time.Since(startTime))
 
@@ -424,10 +461,16 @@ func (o *OCRImpl) runOCR(ctx context.Context, imagePath string) (string, error) 
 	resultCh := make(chan string, 1)
 
 	go func() {
-		// 자주 발생하는 경고 메시지 제거
-		warningText := "Warning: Invalid resolution 0 dpi. Using 70 instead"
-		if strings.Contains(textDetected, warningText) {
-			textDetected = strings.ReplaceAll(textDetected, warningText, "")
+		// 한글이 시작되는 부분부터 추출 (warning 특정 메세지 확인보다 ocr 읽어낸 값 있으면 바로 반환하도록 함)
+		var koreanStart int
+		for i, r := range textDetected {
+			if unicode.Is(unicode.Hangul, r) {
+				koreanStart = i
+				break
+			}
+		}
+		if koreanStart > 0 {
+			textDetected = textDetected[koreanStart:]
 		}
 
 		// 모든 공백문자 처리: 줄바꿈과 공백 제거
