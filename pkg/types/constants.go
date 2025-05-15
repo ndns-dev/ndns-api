@@ -16,6 +16,7 @@ var SPONSOR_DOMAINS = []string{
 	"storyn.kr",
 	"dinnerqueen.net",
 	"review",
+	"ringble",
 }
 
 // 네이버 이미지 패턴
@@ -51,7 +52,7 @@ var CONTENT_SELECTORS = []string{
 }
 
 // 타임아웃 시간
-var TIMEOUT = 10 * time.Second
+var TIMEOUT = 4 * time.Second
 
 const MAX_IMAGE_SIZE = 12000000  // 1200만 픽셀 (약 4000x3000 크기)
 const MAX_IMAGE_DIMENSION = 1200 // 픽셀 단위 (1200x1200 이상인 이미지는 크롭)
