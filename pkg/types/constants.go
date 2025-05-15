@@ -15,6 +15,7 @@ var SPONSOR_DOMAINS = []string{
 	"xn--939au0g4vj8sq.net",
 	"revu.net",
 	"storyn.kr",
+	"dinnerqueen.net",
 }
 
 // 네이버 이미지 패턴
