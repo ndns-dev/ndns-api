@@ -195,43 +195,75 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 						// 4. 마지막 스티커 이미지 OCR 처리 (협찬이 발견되지 않은 경우)
 						utils.DebugLog("4-1. 마지막 스티커 이미지 OCR 처리 (2025년 이전 포스트만)\n")
 						if !blogPost.IsSponsored && crawlResult.LastStickerURL != "" && crawlResult.LastStickerURL != crawlResult.FirstStickerURL {
-							ocrText, err := ocrExtractor(crawlResult.LastStickerURL)
-							if err != nil {
-								errMsg := fmt.Sprintf("마지막 스티커 OCR 처리 오류: %s", err.Error())
-								utils.DebugLog("%s", err.Error())
-								// 오류 메시지 저장
-								analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, false, 0, nil, errMsg)
-							} else if strings.Contains(ocrText, "context deadline exceeded") ||
-								strings.Contains(ocrText, "Get \"") {
-								// OCR 텍스트가 오류 메시지를 포함하는 경우 처리
-								analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, false, 0, nil, ocrText)
+							// 마지막 스티커 URL이 협찬 도메인인지 먼저 확인
+							if foundDomain, matchedDomain := analyzer.CheckSponsorDomain(crawlResult.LastStickerURL, constant.SPONSOR_DOMAINS); foundDomain {
+								// 협찬 도메인이 발견된 경우 바로 협찬으로 판단
+								analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, true, structure.Accuracy.Absolute, []structure.SponsorIndicator{
+									analyzer.CreateSponsorIndicator(
+										structure.IndicatorTypeKeyword,
+										structure.PatternTypeNormal,
+										crawlResult.LastStickerURL,
+										structure.Accuracy.Absolute,
+										structure.SponsorTypeSticker,
+										matchedDomain,
+									),
+								})
 							} else {
-								isSponsored, probability, indicators = DetectSponsor(ocrText, structure.SponsorTypeSticker)
-								if isSponsored {
-									//협찬 정보 업데이트
-									analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
+								// 협찬 도메인이 아닌 경우 OCR 처리 진행
+								ocrText, err := ocrExtractor(crawlResult.LastStickerURL)
+								if err != nil {
+									errMsg := fmt.Sprintf("마지막 스티커 OCR 처리 오류: %s", err.Error())
+									utils.DebugLog("%s", err.Error())
+									// 오류 메시지 저장
+									analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, false, 0, nil, errMsg)
+								} else if strings.Contains(ocrText, "context deadline exceeded") ||
+									strings.Contains(ocrText, "Get \"") {
+									// OCR 텍스트가 오류 메시지를 포함하는 경우 처리
+									analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, false, 0, nil, ocrText)
+								} else {
+									isSponsored, probability, indicators = DetectSponsor(ocrText, structure.SponsorTypeSticker)
+									if isSponsored {
+										//협찬 정보 업데이트
+										analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
+									}
 								}
 							}
 						}
 
-						// 5. 마지막 이미지 OCR 처리 (협찬이 발견되지 않은 경우)
+						// 4-2. 마지막 이미지 OCR 처리 (협찬이 발견되지 않은 경우)
 						utils.DebugLog("4-2. 마지막 이미지 OCR 처리 (2025년 이전 포스트만)\n")
 						if !blogPost.IsSponsored && crawlResult.LastImageURL != "" && crawlResult.LastImageURL != crawlResult.FirstImageURL {
-							ocrText, err := ocrExtractor(crawlResult.LastImageURL)
-							if err != nil {
-								errMsg := fmt.Sprintf("마지막 이미지 OCR 처리 오류: %s", err.Error())
-								utils.DebugLog("%s", err.Error())
-								// 오류 메시지 저장
-								analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, false, 0, nil, errMsg)
-							} else if strings.Contains(ocrText, "context deadline exceeded") ||
-								strings.Contains(ocrText, "Get \"") {
-								// OCR 텍스트가 오류 메시지를 포함하는 경우 처리
-								analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, false, 0, nil, ocrText)
+							// 마지막 이미지 URL이 협찬 도메인인지 먼저 확인
+							if foundDomain, matchedDomain := analyzer.CheckSponsorDomain(crawlResult.LastImageURL, constant.SPONSOR_DOMAINS); foundDomain {
+								// 협찬 도메인이 발견된 경우 바로 협찬으로 판단
+								analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, true, structure.Accuracy.Absolute, []structure.SponsorIndicator{
+									analyzer.CreateSponsorIndicator(
+										structure.IndicatorTypeKeyword,
+										structure.PatternTypeNormal,
+										crawlResult.LastImageURL,
+										structure.Accuracy.Absolute,
+										structure.SponsorTypeImage,
+										matchedDomain,
+									),
+								})
 							} else {
-								isSponsored, probability, indicators = DetectSponsor(ocrText, structure.SponsorTypeImage)
-								if isSponsored {
-									//협찬 정보 업데이트
-									analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
+								// 협찬 도메인이 아닌 경우 OCR 처리 진행
+								ocrText, err := ocrExtractor(crawlResult.LastImageURL)
+								if err != nil {
+									errMsg := fmt.Sprintf("마지막 이미지 OCR 처리 오류: %s", err.Error())
+									utils.DebugLog("%s", err.Error())
+									// 오류 메시지 저장
+									analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, false, 0, nil, errMsg)
+								} else if strings.Contains(ocrText, "context deadline exceeded") ||
+									strings.Contains(ocrText, "Get \"") {
+									// OCR 텍스트가 오류 메시지를 포함하는 경우 처리
+									analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, false, 0, nil, ocrText)
+								} else {
+									isSponsored, probability, indicators = DetectSponsor(ocrText, structure.SponsorTypeImage)
+									if isSponsored {
+										//협찬 정보 업데이트
+										analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
+									}
 								}
 							}
 						}
