@@ -314,16 +314,15 @@ func extractFirstParagraphOnly(doc *goquery.Document, result *structure.CrawlRes
 		"p",                  // 일반 문단 태그
 	}
 
-	// 첫 번째 의미 있는 문단 찾기
-	foundFirst := false
+	// 첫 3개의 의미 있는 문단 찾기
 	for _, selector := range paragraphSelectors {
-		if foundFirst {
+		if len(paragraphs) >= 3 {
 			break
 		}
 
 		paragraphElements := contentArea.Find(selector)
 		paragraphElements.Each(func(i int, p *goquery.Selection) {
-			if foundFirst {
+			if len(paragraphs) >= 3 {
 				return
 			}
 
@@ -333,15 +332,13 @@ func extractFirstParagraphOnly(doc *goquery.Document, result *structure.CrawlRes
 
 			if text != "" && len(text) > 10 {
 				paragraphs = append(paragraphs, text)
-				foundFirst = true
-				return
 			}
 		})
 	}
 
-	// FirstParagraph 설정
+	// FirstParagraph 설정 - 문단 병합
 	if len(paragraphs) > 0 {
-		result.FirstParagraph = paragraphs[0]
+		result.FirstParagraph = strings.Join(paragraphs, " ")
 		// 마지막 문단은 수집하지 않음 (2025년 이후 포스트)
 		result.LastParagraph = ""
 	}
@@ -809,7 +806,15 @@ func extractFirstParagraph(doc *goquery.Document, result *structure.CrawlResult)
 
 	// FirstParagraph 설정
 	if len(allTexts) > 0 {
-		result.FirstParagraph = allTexts[0]
+		// 첫 번째 문단 - 최대 3개의 문단 병합
+		endIndex := min(3, len(allTexts)) - 1
+
+		var firstParagraphs []string
+		for i := 0; i <= endIndex; i++ {
+			firstParagraphs = append(firstParagraphs, allTexts[i])
+		}
+
+		result.FirstParagraph = strings.Join(firstParagraphs, " ")
 		fmt.Printf("첫 번째 문단 추출 (%d 바이트):\n%s\n", len(result.FirstParagraph), result.FirstParagraph)
 
 		// LastParagraph 설정 - 최대 3개의 마지막 문단을 합침
