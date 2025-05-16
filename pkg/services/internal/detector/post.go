@@ -13,8 +13,50 @@ import (
 	"github.com/sh5080/ndns-go/pkg/utils"
 )
 
+// OCR 처리 공통 함수
+func processOCR(url string, ocrExtractor _interface.OCRFunc, sourceType structure.SponsorType) (bool, float64, []structure.SponsorIndicator, string) {
+	// URL이 비어있으면 처리 건너뜀
+	if url == "" {
+		return false, 0, nil, ""
+	}
+
+	// 이미지인지 스티커인지 확인
+	isSticker := sourceType == structure.SponsorTypeSticker
+
+	// 스티커가 아닌 일반 이미지인 경우에만 네이버 이미지 패턴 확인
+	if !isSticker {
+		// 네이버 이미지 패턴인지 확인
+		isNaverImage := false
+		for _, domain := range constant.NAVER_IMAGE_PATTERNS {
+			if strings.Contains(url, domain) {
+				isNaverImage = true
+				break
+			}
+		}
+
+		// 네이버 제공 이미지가 아니면 OCR 처리를 건너뜀
+		if !isNaverImage {
+			utils.DebugLog("네이버 이미지가 아니므로 OCR 처리 건너뜀: %s\n", url)
+			return false, 0, nil, ""
+		}
+	}
+
+	ocrText, err := ocrExtractor(url)
+	if err != nil {
+		errMsg := fmt.Sprintf("OCR 처리 오류: %s", err.Error())
+		utils.DebugLog("OCR 오류: %s\n", err.Error())
+		return false, 0, nil, errMsg
+	}
+
+	if strings.Contains(ocrText, "context deadline exceeded") || strings.Contains(ocrText, "Get \"") {
+		return false, 0, nil, ocrText
+	}
+	isSponsored, probability, indicators := DetectSponsor(ocrText, sourceType)
+	return isSponsored, probability, indicators, ""
+}
+
 // DetectTextInPosts는 여러 포스트에서 동시에 협찬 관련 텍스트를 탐지합니다
-func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interface.OCRFunc, ocrCacheFunc _interface.OCRCacheFunc) []structure.BlogPost {
+func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interface.OCRFunc) []structure.BlogPost {
 	// 결과를 저장할 슬라이스 초기화
 	results := make([]structure.BlogPost, len(posts))
 
@@ -26,9 +68,8 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 	// 동시성 제어를 위한 WaitGroup
 	var wg sync.WaitGroup
 
-	// 동시성 제어를 위한 뮤텍스와 채널
+	// 동시성 제어를 위한 뮤텍스
 	var mu sync.Mutex
-	doneCh := make(chan struct{})
 
 	// 각 포스트에 대해 병렬로 처리
 	for i, post := range posts {
@@ -38,14 +79,6 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 		go func(index int, item structure.NaverSearchItem) {
 			defer wg.Done()
 
-			// 외부 신호 확인 (다른 고루틴에서 이미 확실한 스폰서를 발견한 경우)
-			select {
-			case <-doneCh:
-				// 다른 고루틴에서 이미 확실한 스폰서를 발견했으므로 종료
-				return
-			default:
-				// 계속 진행
-			}
 			utils.DebugLog("포스트 날짜: %v\n", item.PostDate)
 			// 2025년 이후 포스트인지 확인
 			is2025OrLater := utils.IsAfter2025(item.PostDate)
@@ -110,71 +143,47 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 						domain,
 					)
 
-					// 결과 저장 및 다른 고루틴에게 알림
+					// 중요: 도메인으로 협찬이 확인된 경우 에러 필드를 명시적으로 비웁니다
+					blogPost.Error = ""
+
+					// 결과 저장
 					mu.Lock()
 					results[index] = blogPost
 					mu.Unlock()
-
-					// 높은 확률의 스폰서가 발견되면 다른 고루틴에게 알림
-					if blogPost.IsSponsored && blogPost.SponsorProbability >= structure.Accuracy.Absolute {
-						select {
-						case <-doneCh:
-							// 이미 채널이 닫혀있으면 무시
-						default:
-							// 채널 닫기 (다른 고루틴에게 신호)
-							close(doneCh)
-						}
-					}
 					return
 				}
 
 				// 2. 도메인에서 협찬이 발견되지 않은 경우, 이미지/스티커 OCR 분석
 				// 2-1. 첫 번째 이미지 OCR 처리
-				if crawlResult.FirstImageURL != "" && !blogPost.IsSponsored {
+				if crawlResult.FirstImageURL != "" && !blogPost.IsSponsored && blogPost.Error == "" {
 					utils.DebugLog("2-1. 첫 번째 이미지 OCR 처리\n")
-					ocrText, err := ocrExtractor(crawlResult.FirstImageURL)
-					if err != nil {
-						errMsg := fmt.Sprintf("이미지 OCR 처리 오류: %s", err.Error())
-						utils.DebugLog("첫 번째 이미지 OCR 오류: %s\n", err.Error())
+					isSponsored, probability, indicators, errMsg := processOCR(crawlResult.FirstImageURL, ocrExtractor, structure.SponsorTypeImage)
+
+					if errMsg != "" {
 						// 오류 메시지 저장
 						analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, false, 0, nil, errMsg)
-					} else if strings.Contains(ocrText, "context deadline exceeded") ||
-						strings.Contains(ocrText, "Get \"") {
-						// OCR 텍스트가 오류 메시지를 포함하는 경우 처리
-						analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, false, 0, nil, ocrText)
-					} else {
-						isSponsored, probability, indicators := DetectSponsor(ocrText, structure.SponsorTypeImage)
-						if isSponsored {
-							//협찬 정보 업데이트
-							analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
-						}
+					} else if isSponsored {
+						// 협찬 정보 업데이트
+						analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
 					}
 				}
 
 				// 2-2. 첫 번째 스티커 OCR 처리 (첫 번째 이미지에서 스폰서가 발견되지 않은 경우)
-				if crawlResult.FirstStickerURL != "" && !blogPost.IsSponsored {
+				if crawlResult.FirstStickerURL != "" && !blogPost.IsSponsored && blogPost.Error == "" {
 					utils.DebugLog("2-2. 첫 번째 스티커 OCR 처리\n")
-					ocrText, err := ocrExtractor(crawlResult.FirstStickerURL)
-					if err != nil {
-						errMsg := fmt.Sprintf("스티커 OCR 처리 오류: %s", err.Error())
-						utils.DebugLog("첫 번째 스티커 OCR 오류: %s\n", err.Error())
+					isSponsored, probability, indicators, errMsg := processOCR(crawlResult.FirstStickerURL, ocrExtractor, structure.SponsorTypeSticker)
+
+					if errMsg != "" {
 						// 오류 메시지 저장
 						analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, false, 0, nil, errMsg)
-					} else if strings.Contains(ocrText, "context deadline exceeded") ||
-						strings.Contains(ocrText, "Get \"") {
-						// OCR 텍스트가 오류 메시지를 포함하는 경우 처리
-						analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, false, 0, nil, ocrText)
-					} else {
-						isSponsored, probability, indicators := DetectSponsor(ocrText, structure.SponsorTypeSticker)
-						if isSponsored {
-							//협찬 정보 업데이트
-							analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
-						}
+					} else if isSponsored {
+						// 협찬 정보 업데이트
+						analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
 					}
 				}
 
 				// 3-1. 첫 번째 문단 분석 (이미지/스티커 OCR에서 스폰서가 발견되지 않은 경우)
-				if !blogPost.IsSponsored {
+				if !blogPost.IsSponsored && blogPost.Error == "" {
 					utils.DebugLog("3-1. 첫 번째 문단 분석\n")
 					isSponsored, probability, indicators := DetectSponsor(crawlResult.FirstParagraph, structure.SponsorTypeParagraph)
 
@@ -194,7 +203,7 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 
 						// 4. 마지막 스티커 이미지 OCR 처리 (협찬이 발견되지 않은 경우)
 						utils.DebugLog("4-1. 마지막 스티커 이미지 OCR 처리 (2025년 이전 포스트만)\n")
-						if !blogPost.IsSponsored && crawlResult.LastStickerURL != "" && crawlResult.LastStickerURL != crawlResult.FirstStickerURL {
+						if !blogPost.IsSponsored && blogPost.Error == "" && crawlResult.LastStickerURL != "" && crawlResult.LastStickerURL != crawlResult.FirstStickerURL {
 							// 마지막 스티커 URL이 협찬 도메인인지 먼저 확인
 							if foundDomain, matchedDomain := analyzer.CheckSponsorDomain(crawlResult.LastStickerURL, constant.SPONSOR_DOMAINS); foundDomain {
 								// 협찬 도메인이 발견된 경우 바로 협찬으로 판단
@@ -210,29 +219,22 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 								})
 							} else {
 								// 협찬 도메인이 아닌 경우 OCR 처리 진행
-								ocrText, err := ocrExtractor(crawlResult.LastStickerURL)
-								if err != nil {
-									errMsg := fmt.Sprintf("마지막 스티커 OCR 처리 오류: %s", err.Error())
-									utils.DebugLog("%s", err.Error())
+								isSponsored, probability, indicators, errMsg := processOCR(crawlResult.LastStickerURL, ocrExtractor, structure.SponsorTypeSticker)
+
+								if errMsg != "" {
 									// 오류 메시지 저장
 									analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, false, 0, nil, errMsg)
-								} else if strings.Contains(ocrText, "context deadline exceeded") ||
-									strings.Contains(ocrText, "Get \"") {
-									// OCR 텍스트가 오류 메시지를 포함하는 경우 처리
-									analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, false, 0, nil, ocrText)
-								} else {
-									isSponsored, probability, indicators = DetectSponsor(ocrText, structure.SponsorTypeSticker)
-									if isSponsored {
-										//협찬 정보 업데이트
-										analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
-									}
+								} else if isSponsored {
+									// 협찬 정보 업데이트
+									analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
 								}
 							}
 						}
 
 						// 4-2. 마지막 이미지 OCR 처리 (협찬이 발견되지 않은 경우)
 						utils.DebugLog("4-2. 마지막 이미지 OCR 처리 (2025년 이전 포스트만)\n")
-						if !blogPost.IsSponsored && crawlResult.LastImageURL != "" && crawlResult.LastImageURL != crawlResult.FirstImageURL {
+
+						if !blogPost.IsSponsored && blogPost.Error == "" && crawlResult.LastImageURL != "" && crawlResult.LastImageURL != crawlResult.FirstImageURL {
 							// 마지막 이미지 URL이 협찬 도메인인지 먼저 확인
 							if foundDomain, matchedDomain := analyzer.CheckSponsorDomain(crawlResult.LastImageURL, constant.SPONSOR_DOMAINS); foundDomain {
 								// 협찬 도메인이 발견된 경우 바로 협찬으로 판단
@@ -248,22 +250,14 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 								})
 							} else {
 								// 협찬 도메인이 아닌 경우 OCR 처리 진행
-								ocrText, err := ocrExtractor(crawlResult.LastImageURL)
-								if err != nil {
-									errMsg := fmt.Sprintf("마지막 이미지 OCR 처리 오류: %s", err.Error())
-									utils.DebugLog("%s", err.Error())
+								isSponsored, probability, indicators, errMsg := processOCR(crawlResult.LastImageURL, ocrExtractor, structure.SponsorTypeImage)
+
+								if errMsg != "" {
 									// 오류 메시지 저장
 									analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, false, 0, nil, errMsg)
-								} else if strings.Contains(ocrText, "context deadline exceeded") ||
-									strings.Contains(ocrText, "Get \"") {
-									// OCR 텍스트가 오류 메시지를 포함하는 경우 처리
-									analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, false, 0, nil, ocrText)
-								} else {
-									isSponsored, probability, indicators = DetectSponsor(ocrText, structure.SponsorTypeImage)
-									if isSponsored {
-										//협찬 정보 업데이트
-										analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
-									}
+								} else if isSponsored {
+									// 협찬 정보 업데이트
+									analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, isSponsored, probability, indicators)
 								}
 							}
 						}
@@ -272,21 +266,11 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 					}
 				}
 			}
+
 			// 결과 저장
 			mu.Lock()
 			results[index] = blogPost
 			mu.Unlock()
-
-			// 높은 확률의 스폰서가 발견되면 다른 고루틴에게 알림
-			if blogPost.IsSponsored && blogPost.SponsorProbability >= structure.Accuracy.Exact {
-				select {
-				case <-doneCh:
-					// 이미 채널이 닫혀있으면 무시
-				default:
-					// 채널 닫기 (다른 고루틴에게 신호)
-					close(doneCh)
-				}
-			}
 		}(i, post)
 	}
 
