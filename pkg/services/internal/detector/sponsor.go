@@ -46,7 +46,7 @@ func (s *SponsorImpl) DetectSponsor(posts []structure.NaverSearchItem) ([]struct
 		return "", false
 	}
 	// 1. 네이버 API 텍스트에서 탐지 (빠른 1차 분석)
-	results := DetectTextInPosts(posts, ocrFunc, ocrCacheFunc)
+	results := DetectTextInPosts(posts, ocrFunc)
 
 	// 크롤링 및 이미지 분석 수행
 	results = analyzer.Crawl(results, ocrFunc, ocrCacheFunc)
