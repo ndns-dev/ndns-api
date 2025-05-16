@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"fmt"
 	"strconv"
 	"time"
 
@@ -22,9 +21,6 @@ func Prometheus() fiber.Handler {
 		status := c.Response().StatusCode()
 		method := c.Method()
 		path := c.Route().Path
-
-		// 디버깅 로그
-		fmt.Printf("메트릭 기록: %s %s %d (%.3f초)\n", method, path, status, duration)
 
 		// 요청 카운터 증가
 		utils.RequestCounter.WithLabelValues(method, path, strconv.Itoa(status)).Inc()

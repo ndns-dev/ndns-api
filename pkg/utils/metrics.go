@@ -78,6 +78,5 @@ func RecordError(service string, errorType string) {
 
 // RecordOcrProcessingTime은 OCR 처리 시간을 기록합니다
 func RecordOcrProcessingTime(duration float64) {
-	fmt.Printf("메트릭 직접 기록: ndns_ocr_processing_time_seconds %.2f초\n", duration)
 	OcrProcessingTime.Observe(duration)
 }

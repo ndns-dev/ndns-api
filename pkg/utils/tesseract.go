@@ -29,10 +29,6 @@ func RunTesseractWithContext(ctx context.Context, imagePath string, psm ...strin
 	// Tesseract 명령 생성
 	cmd := exec.CommandContext(ctx, "tesseract", imagePath, "stdout", "-l", "kor", "--psm", defaultPsm, "--oem", "3", "-c", "preserve_interword_spaces=1")
 
-	// 디버깅을 위해 명령 출력
-	cmdStr := cmd.String()
-	fmt.Printf("Tesseract 명령 실행: %s\n", cmdStr)
-
 	// 결과와 에러를 받을 채널 생성
 	resultCh := make(chan struct {
 		output []byte
@@ -58,7 +54,7 @@ func RunTesseractWithContext(ctx context.Context, imagePath string, psm ...strin
 	select {
 	case <-ctx.Done():
 		fmt.Printf("Tesseract OCR 타임아웃: %v\n", ctx.Err())
-		return "" // 타임아웃 시 빈 문자열 반환
+		return "" // 타임아웃 시 빈 문자열 반환 (이미지 상태에 따라 타임아웃은 확인될 수 있음)
 	case result := <-resultCh:
 		// 기타 오류 확인
 		if result.err != nil {
