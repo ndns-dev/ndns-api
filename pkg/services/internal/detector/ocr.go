@@ -54,14 +54,15 @@ func (o *OCRImpl) ExtractTextFromImage(imageURL string) (string, error) {
 	}
 
 	// 캐시 확인
-	if o.ocrRepo != nil {
-		cache, err := o.ocrRepo.GetOCRCache(imageURL)
-		if err == nil && cache != nil && cache.TextDetected != "" {
-			// 캐시 히트 메트릭 기록
-			utils.Info(serviceType, "캐시 히트: %s", imageURL)
-			return cache.TextDetected, nil
-		}
-	}
+	// if o.ocrRepo != nil {
+	// 	cache, err := o.ocrRepo.GetOCRCache(imageURL)
+	// 	if err == nil && cache != nil && cache.TextDetected != "" {
+	// 		// 캐시 히트 메트릭 기록
+	// 		utils.Info(serviceType, "캐시 히트: %s", imageURL)
+	// 		fmt.Printf("cache.TextDetected: %s\n", cache.TextDetected)
+	// 		return cache.TextDetected, nil
+	// 	}
+	// }
 
 	// 상위 컨텍스트 생성 (최대 처리 시간 제한)
 	parentCtx, parentCancel := context.WithTimeout(context.Background(), constants.TIMEOUT)
@@ -119,19 +120,12 @@ func (o *OCRImpl) ExtractTextFromImage(imageURL string) (string, error) {
 	select {
 	case <-parentCtx.Done():
 		// 타임아웃 발생
-		timeoutErr := fmt.Sprintf("OCR 처리 시간 초과 (%s): %v", constants.TIMEOUT, parentCtx.Err())
-		utils.Error(serviceType, "타임아웃 [URL: %s]: %s", imageURL, timeoutErr)
-		utils.RecordError(serviceType, "timeout")
-
-		// OCR 오류 로그 데이터 저장
-		utils.OCRErrorLog("TIMEOUT", imageURL, timeoutErr)
-
-		return "[" + timeoutErr + "]", nil
+		timeoutErr := fmt.Sprintf("[OCR 처리 시간 초과 (%s)]", constants.TIMEOUT)
+		utils.RecordError("image_ocr_timeout", "OCR 처리 시간 초과")
+		return timeoutErr, nil
 	case result := <-resultCh:
 		// 총 처리 시간 기록 (메트릭용)
 		duration := time.Since(startTime).Seconds()
-		// 메트릭 관련 로그를 명확하게 추가
-		fmt.Printf("OCR 메트릭 기록: ndns_ocr_processing_time_seconds %.2f초\n", duration)
 		// 메트릭 기록 - 별도 함수를 사용하여 확실히 실행되도록
 		utils.RecordOcrProcessingTime(duration)
 		utils.Info(serviceType, "OCR 처리 완료 - 소요 시간: %.2f초", duration)
@@ -171,21 +165,11 @@ func (o *OCRImpl) downloadImage(imageURL string) (string, error) {
 		return "", fmt.Errorf("GIF 파일은 OCR 미지원: %s", imageURL)
 	}
 
-	isNaverImage := false
-	for _, pattern := range constants.NAVER_IMAGE_PATTERNS {
-		if strings.Contains(imageURL, pattern) {
-			isNaverImage = true
-			break
-		}
-	}
-
-	if isNaverImage {
-		if !strings.Contains(imageURL, "?type=") && !strings.Contains(imageURL, "&type=") {
-			if strings.Contains(imageURL, "?") {
-				imageURL += "&type=w773"
-			} else {
-				imageURL += "?type=w773"
-			}
+	if !strings.Contains(imageURL, "?type=") && !strings.Contains(imageURL, "&type=") {
+		if strings.Contains(imageURL, "?") {
+			imageURL += "&type=w773"
+		} else {
+			imageURL += "?type=w773"
 		}
 	}
 
@@ -430,7 +414,7 @@ func (o *OCRImpl) runOCR(ctx context.Context, imagePath string, imageURL string)
 	if ctx.Err() != nil {
 		fmt.Printf("상위 컨텍스트 취소됨: %v\n", ctx.Err())
 		utils.RecordError(serviceType, "context_deadline_exceeded")
-		utils.Error(serviceType, "Tesseract OCR 처리 중 컨텍스트 취소됨: %v [이미지: %s]", ctx.Err(), imagePath)
+		utils.Error(serviceType, "Tesseract OCR 처리 중 컨텍스트 취소됨: %v [이미지: %s]", ctx.Err(), imageURL)
 
 		// OCR 오류 로그 데이터 저장
 		utils.OCRErrorLog("CONTEXT_DEADLINE_EXCEEDED", imageURL, ctx.Err().Error())
@@ -442,7 +426,7 @@ func (o *OCRImpl) runOCR(ctx context.Context, imagePath string, imageURL string)
 	if textDetected == "" {
 		fmt.Printf("최종 OCR 결과: 인식 불가 (총 실행 시간: %v)\n", time.Since(startTime))
 		utils.RecordError(serviceType, "no_text_detected")
-		utils.Error(serviceType, "OCR 인식 불가: 텍스트 추출 실패 [이미지: %s]", imagePath)
+		utils.Error(serviceType, "OCR 인식 불가: 텍스트 추출 실패 [이미지: %s]", imageURL)
 
 		// OCR 오류 로그 데이터 저장
 		utils.OCRErrorLog("NO_TEXT_DETECTED", imageURL, "텍스트 추출 실패")
@@ -452,7 +436,6 @@ func (o *OCRImpl) runOCR(ctx context.Context, imagePath string, imageURL string)
 
 	// OCR 처리 시간 측정 완료
 	ocrDuration := time.Since(startTime).Seconds()
-	fmt.Printf("OCR 엔진 처리 메트릭 기록: ndns_ocr_processing_time_seconds %.2f초\n", ocrDuration)
 	utils.RecordOcrProcessingTime(ocrDuration)
 
 	fmt.Printf("최종 OCR 결과: 성공 (총 실행 시간: %v)\n", time.Since(startTime))
