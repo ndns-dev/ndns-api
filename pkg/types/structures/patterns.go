@@ -36,9 +36,11 @@ var SPECIAL_CASE_PATTERNS = []SpecialCasePattern{
 
 // 2번 확인 패턴: EXACT_SPONSOR_KEYWORDS_PATTERNS는 정확한 스폰서 키워드 패턴을 정의합니다
 var EXACT_SPONSOR_KEYWORDS_PATTERNS = []string{
-	"원고료",
+	// 단어 일부 포함된 패턴
+	"고료",
+	"험단",
+
 	"소정의",
-	"체험단",
 	"협찬",
 	"수수료",
 	// ocr로 잘못 읽었지만 협찬 패턴
@@ -54,7 +56,6 @@ var SPONSOR_KEYWORDS = map[string]float64{
 	"지원":   0.4,
 	"무상":   0.4,
 	"무료제공": 0.6,
-	"고료":   0.6,
 	"제품제공": 0.7,
 	// 유료 광고 관련 키워드
 	"광고":   0.1,
@@ -74,6 +75,7 @@ var SPONSOR_KEYWORDS = map[string]float64{
 	"업체":    0.4,
 	"혜택":    0.2,
 	"제공":    0.4,
+	"선정":    0.4,
 	//ocr로 잘못 읽었지만 협찬 패턴
 	"업제": 0.4,
 	"입체": 0.4,
