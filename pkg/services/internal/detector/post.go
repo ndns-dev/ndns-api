@@ -97,6 +97,21 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 				crawlResult, err := crawler.CrawlBlogPost(item.Link, is2025OrLater)
 				if err != nil {
 					fmt.Printf("[%d] 크롤링 실패: %v\n", index, err)
+					// 크롤링 실패 시 에러 메시지 저장하고 결과 반환
+					blogPost.Error = fmt.Sprintf("크롤링 실패: %v", err)
+					mu.Lock()
+					results[index] = blogPost
+					mu.Unlock()
+					return
+				}
+
+				// crawlResult가 nil인 경우 처리
+				if crawlResult == nil {
+					blogPost.Error = "크롤링 결과가 없습니다"
+					mu.Lock()
+					results[index] = blogPost
+					mu.Unlock()
+					return
 				}
 
 				// 본문 분석 순서:
