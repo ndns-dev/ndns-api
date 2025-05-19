@@ -11,6 +11,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -28,7 +31,17 @@ jobs:
             --output text)
           echo "PUBLIC_IP=$IP" >> $GITHUB_ENV
 
-      - name: Deploy to Server via SSH
+      - name: Copy deploy directory to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ env.PUBLIC_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_SSH_PORT }}
+          source: "deploy/*"
+          target: "/home/ubuntu/deploy"
+
+      - name: Run deploy.sh on EC2
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ env.PUBLIC_IP }}
@@ -37,8 +50,8 @@ jobs:
           port: ${{ secrets.SERVER_SSH_PORT }}
           script: |
             docker pull ${{ secrets.DOCKER_USERNAME }}/ndns-go:latest
-            chmod +x deploy/deploy.sh
-            ./deploy/deploy.sh
+            chmod +x /home/ubuntu/deploy/deploy.sh
+            /home/ubuntu/deploy/deploy.sh
 
       - name: Notify Discord on Success
         if: success()
