@@ -30,7 +30,8 @@ jobs:
             --query "Reservations[*].Instances[*].PublicIpAddress" \
             --output text)
           echo "PUBLIC_IP=$IP" >> $GITHUB_ENV
-      - name: Remove old deploy directory (optional but safer)
+
+      - name: Remove old deploy directory
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ env.PUBLIC_IP }}
@@ -38,17 +39,20 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_SSH_PORT }}
           script: |
-            rm -rf /home/ubuntu/deploy
-            
-      - name: Copy deploy directory to EC2
+              rm -rf /home/ubuntu/deploy
+        
+      - name: Copy deploy directory to EC2 (flattened)
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ env.PUBLIC_IP }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_SSH_PORT }}
-          source: "deploy/*"
+          source: "deploy/**"
           target: "/home/ubuntu/deploy"
+          strip_components: 1
+        
+
 
       - name: Run deploy.sh on EC2
         uses: appleboy/ssh-action@v1.0.0
