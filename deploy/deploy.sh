@@ -40,10 +40,10 @@ docker run -d \
   $IMAGE
 
 # Nginx 설정 템플릿에서 upstream 포트만 교체
-sed "s/{{PORT}}/$NEXT_PORT/g" $NGINX_TEMPLATE > $NGINX_CONF_PATH
+sed "s/{{PORT}}/$NEXT_PORT/g" "$NGINX_TEMPLATE" | sudo tee "$NGINX_CONF_PATH" > /dev/null
 
-# Nginx reload
-nginx -s reload
+# Nginx 설정 리로드
+sudo nginx -s reload
 
 # 기존 컨테이너 종료 및 삭제
 docker rm -f $OLD_CONTAINER 2>/dev/null || true
