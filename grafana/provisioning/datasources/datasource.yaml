@@ -1,0 +1,13 @@
+# 그라파나 데이터 소스 설정 파일
+# 이 파일은 그라파나가 프로메테우스에 연결하기 위한 설정을 정의합니다.
+# 프로메테우스 자체의 설정 파일(prometheus.yml)과는 다른 용도입니다.
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false 

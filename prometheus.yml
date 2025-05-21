@@ -1,3 +1,7 @@
+# 프로메테우스 메인 설정 파일
+# 이 파일은 프로메테우스가 메트릭을 수집할 대상을 정의합니다.
+# Dockerfile.prometheus에서 이 파일을 /etc/prometheus/prometheus.yml로 복사합니다.
+
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
@@ -10,8 +14,10 @@ scrape_configs:
   - job_name: 'ndns-go'
     metrics_path: /metrics
     static_configs:
-      # 도커 내 서비스에 직접 접근 (localhost 사용)
-      - targets: ['host.docker.internal:8085']
+      # API 서버 컨테이너 이름으로 접근 (Docker 네트워크 내에서)
+      - targets: ['api-server:8085']
+      # 백업 타겟으로 localhost 유지
+      - targets: ['localhost:8085']
       # 아래는 다양한 환경에 따른 설정 예시입니다
       # 로컬 개발: host.docker.internal:8085  
       # 운영 환경 (외부): api.ndns.site:8085
