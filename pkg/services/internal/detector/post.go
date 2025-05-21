@@ -20,27 +20,6 @@ func processOCR(url string, ocrExtractor _interface.OCRFunc, sourceType structur
 		return false, 0, nil, ""
 	}
 
-	// 이미지인지 스티커인지 확인
-	isSticker := sourceType == structure.SponsorTypeSticker
-
-	// 스티커가 아닌 일반 이미지인 경우에만 네이버 이미지 패턴 확인
-	if !isSticker {
-		// 네이버 이미지 패턴인지 확인
-		isNaverImage := false
-		for _, domain := range constant.NAVER_IMAGE_PATTERNS {
-			if strings.Contains(url, domain) {
-				isNaverImage = true
-				break
-			}
-		}
-
-		// 네이버 제공 이미지가 아니면 OCR 처리를 건너뜀
-		if !isNaverImage {
-			utils.DebugLog("네이버 이미지가 아니므로 OCR 처리 건너뜀: %s\n", url)
-			return false, 0, nil, ""
-		}
-	}
-
 	ocrText, err := ocrExtractor(url)
 	if err != nil {
 		errMsg := fmt.Sprintf("OCR 처리 오류: %s", err.Error())
