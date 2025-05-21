@@ -267,11 +267,12 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 
 						// 4-2. 마지막 이미지 OCR 처리 (협찬이 발견되지 않은 경우)
 						utils.DebugLog("4-2. 마지막 이미지 OCR 처리 (2025년 이전 포스트만)\n")
-
-						if !blogPost.IsSponsored && blogPost.Error == "" && crawlResult.LastImageURL != "" && crawlResult.LastImageURL != crawlResult.FirstImageURL {
+						// 마지막 이미지 URL이 비어있지 않고 첫 번째 이미지 URL과 다르면 협찬 탐지 진행
+						if !blogPost.IsSponsored && crawlResult.LastImageURL != "" && crawlResult.LastImageURL != crawlResult.FirstImageURL {
 							// 마지막 이미지 URL이 협찬 도메인인지 먼저 확인
 							if foundDomain, matchedDomain := analyzer.CheckSponsorDomain(crawlResult.LastImageURL, constant.SPONSOR_DOMAINS); foundDomain {
 								// 협찬 도메인이 발견된 경우 바로 협찬으로 판단
+
 								analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, true, structure.Accuracy.Absolute, []structure.SponsorIndicator{
 									analyzer.CreateSponsorIndicator(
 										structure.IndicatorTypeKeyword,
