@@ -1,19 +1,6 @@
 version: '3.8'
 
 services:
-  ndns-go:
-    image: sh5080/ndns-go:latest
-    container_name: ndns-go
-    restart: unless-stopped
-    ports:
-      - "${PORT}:${PORT}"
-    env_file:
-      - .env
-    volumes:
-      - ./logs:/app/logs
-    networks:
-      - backend
-
   prometheus:
     image: sh5080/ndns-prometheus:latest
     container_name: prometheus
@@ -29,7 +16,6 @@ services:
     image: sh5080/ndns-grafana:latest
     container_name: grafana
     restart: unless-stopped
-    # 🔧 외부 노출 없이 localhost 에만 바인딩
     ports:
       - "127.0.0.1:3000:3000"
     networks:
@@ -38,7 +24,6 @@ services:
       - grafana_data:/var/lib/grafana
 
 networks:
-  backend:
   monitoring:
 
 volumes:
