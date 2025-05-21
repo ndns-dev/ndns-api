@@ -61,4 +61,7 @@ var TIMEOUT = 4 * time.Second
 
 const MAX_IMAGE_SIZE = 12000000  // 1200만 픽셀 (약 4000x3000 크기)
 const MAX_IMAGE_DIMENSION = 1200 // 픽셀 단위 (1200x1200 이상인 이미지는 크롭)
-const CROP_HEIGHT = 500          // 상단 500픽셀만 사용
+const CROP_HEIGHT = 500
+const CROP_WIDTH = 100
+const OPTIMAL_WIDTH = 1000 // 최적의 이미지 너비
+const OPTIMAL_HEIGHT = 800 // 최적의 이미지 높이

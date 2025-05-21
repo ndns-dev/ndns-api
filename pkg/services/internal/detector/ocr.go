@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/sh5080/ndns-go/pkg/configs"
 	_interface "github.com/sh5080/ndns-go/pkg/interfaces"
@@ -304,54 +303,21 @@ func (o *OCRImpl) downloadImage(imageURL string) (string, error) {
 	// 이미지 차원(가로/세로) 확인
 	dimensions, err := utils.GetImageDimensions(tempFilePath)
 	if err == nil {
-		// 가로 또는 세로 크기가 최대값을 초과하는 경우
-		const maxDimension = constants.MAX_IMAGE_DIMENSION // 픽셀 단위 (4000x4000 이상인 이미지는 처리하지 않음)
-		if dimensions.Width > maxDimension || dimensions.Height > maxDimension {
-			// 큰 이미지의 경우 상단 1000픽셀만 자르기
-			const cropHeight = constants.CROP_HEIGHT // 상단 1000픽셀만 사용
-			fmt.Printf("이미지가 너무 큼: %dx%d. 상단 %d픽셀만 사용합니다.\n",
-				dimensions.Width, dimensions.Height, cropHeight)
+		// 최적 크롭 적용: 이미지 비율에 따라 가장 좋은 방식으로 잘라냄
+		fmt.Printf("이미지 크기 확인: %dx%d\n", dimensions.Width, dimensions.Height)
 
-			croppedPath, cropErr := utils.CropImageTop(tempFilePath, cropHeight)
-			if cropErr != nil {
-				fmt.Printf("이미지 자르기 실패: %v. 원본 이미지로 계속 진행합니다.\n", cropErr)
-			} else {
-				// 원본 파일은 더 이상 필요하지 않음
-				os.Remove(tempFilePath)
-				// 잘린 이미지 경로로 업데이트
-				tempFilePath = croppedPath
+		// 최적의 OCR 결과를 위해 이미지 크롭 적용
+		croppedPath, cropErr := utils.CropImageOptimal(tempFilePath)
+		if cropErr != nil {
+			fmt.Printf("이미지 최적화 실패: %v. 원본 이미지로 계속 진행합니다.\n", cropErr)
+		} else if croppedPath != tempFilePath {
+			// 크롭된 이미지가 원본과 다르면 원본 제거하고 크롭된 이미지 사용
+			os.Remove(tempFilePath)
+			tempFilePath = croppedPath
 
-				// 새 이미지 크기 확인
-				if newDimensions, err := utils.GetImageDimensions(tempFilePath); err == nil {
-					fmt.Printf("잘린 이미지 크기: %dx%d\n", newDimensions.Width, newDimensions.Height)
-				}
-			}
-		}
-
-		// 이미지 총 픽셀 수가 너무 많은 경우 (초대형 이미지)
-		const maxPixels = constants.MAX_IMAGE_SIZE // 1200만 픽셀 (약 4000x3000 크기)
-		totalPixels := dimensions.Width * dimensions.Height
-		if totalPixels > maxPixels {
-			// 이미 이미지를 잘랐으면 추가적인 조치 필요 없음
-			if !strings.Contains(tempFilePath, "_cropped.jpg") {
-				fmt.Printf("이미지 총 픽셀 수가 너무 많음: %d (최대 %d). 이미지를 자릅니다.\n",
-					totalPixels, maxPixels)
-
-				const cropHeight = constants.CROP_HEIGHT // 상단 1000픽셀만 사용
-				croppedPath, cropErr := utils.CropImageTop(tempFilePath, cropHeight)
-				if cropErr != nil {
-					fmt.Printf("이미지 자르기 실패: %v. 원본 이미지로 계속 진행합니다.\n", cropErr)
-				} else {
-					// 원본 파일은 더 이상 필요하지 않음
-					os.Remove(tempFilePath)
-					// 잘린 이미지 경로로 업데이트
-					tempFilePath = croppedPath
-
-					// 새 이미지 크기 확인
-					if newDimensions, err := utils.GetImageDimensions(tempFilePath); err == nil {
-						fmt.Printf("잘린 이미지 크기: %dx%d\n", newDimensions.Width, newDimensions.Height)
-					}
-				}
+			// 새 이미지 크기 확인
+			if newDimensions, err := utils.GetImageDimensions(tempFilePath); err == nil {
+				fmt.Printf("최적화된 이미지 크기: %dx%d\n", newDimensions.Width, newDimensions.Height)
 			}
 		}
 	} else {
@@ -378,37 +344,8 @@ func (o *OCRImpl) runOCR(ctx context.Context, imagePath string, imageURL string)
 	ocrCtx, cancel := context.WithTimeout(ctx, constants.TIMEOUT)
 	defer cancel()
 
-	// 기본 시도 (PSM 6)
-	fmt.Printf("OCR 처리 시작 (PSM 6)...\n")
+	// 향상된 OCR 처리 사용 (여러 PSM 모드와 이미지 전처리 적용)
 	textDetected := utils.RunTesseractWithContext(ocrCtx, imagePath)
-
-	// 결과가 없으면 다른 psm 모드 시도
-	if textDetected == "" && ctx.Err() == nil {
-		fmt.Printf("OCR 결과 없음, 다른 PSM 모드 시도\n")
-		psm_modes := []string{"7", "8", "10", "11", "12"}
-
-		for _, psm := range psm_modes {
-			// 컨텍스트가 취소되었는지 확인
-			if ctx.Err() != nil {
-				utils.RecordError(serviceType, "context_cancelled")
-				utils.Error(serviceType, "컨텍스트 취소됨 (PSM %s): %v", psm, ctx.Err())
-				break
-			}
-
-			fmt.Printf("대체 OCR 모드 시도 (PSM %s)...\n", psm)
-
-			// 대체 OCR 실행
-			altText := utils.RunTesseractWithContext(ocrCtx, imagePath, psm)
-			fmt.Printf("대체 OCR(PSM %s) 실행 완료\n", psm)
-
-			// 결과가 있으면 해당 결과 사용하고 루프 종료
-			if altText != "" {
-				textDetected = altText
-				fmt.Printf("PSM %s에서 텍스트 감지됨 (총 %d자)\n", psm, len(altText))
-				break
-			}
-		}
-	}
 
 	// 컨텍스트 취소 확인 (상위 컨텍스트의 취소 여부만 확인)
 	if ctx.Err() != nil {
@@ -444,21 +381,22 @@ func (o *OCRImpl) runOCR(ctx context.Context, imagePath string, imageURL string)
 	resultCh := make(chan string, 1)
 
 	go func() {
-		// 한글이 시작되는 부분부터 추출 (warning 특정 메세지 확인보다 ocr 읽어낸 값 있으면 바로 반환하도록 함)
-		var koreanStart int
-		for i, r := range textDetected {
-			if unicode.Is(unicode.Hangul, r) {
-				koreanStart = i
-				break
+		// 한글이 시작되는 부분부터 추출하지 않고 모든 텍스트 유지 (협찬 태그에 영문/특수문자가 포함될 수 있음)
+		// 다만 앞부분에 Tesseract 경고 메시지 등이 있다면 제거
+		if strings.Contains(textDetected, "Warning:") {
+			parts := strings.SplitN(textDetected, "Warning:", 2)
+			if len(parts) > 1 {
+				// Warning 이후 부분에서 다음 줄바꿈 이후의 텍스트만 사용
+				warningParts := strings.SplitN(parts[1], "\n", 2)
+				if len(warningParts) > 1 {
+					textDetected = warningParts[1]
+				}
 			}
 		}
-		if koreanStart > 0 {
-			textDetected = textDetected[koreanStart:]
-		}
 
-		// 모든 공백문자 처리: 줄바꿈과 공백 제거
-		textDetected = strings.ReplaceAll(textDetected, "\n", "")
-		textDetected = strings.ReplaceAll(textDetected, " ", "")
+		// 줄바꿈 제거 및 공백 정리
+		textDetected = strings.ReplaceAll(textDetected, "\n", " ")
+		textDetected = strings.Join(strings.Fields(textDetected), " ") // 연속된 공백 하나로
 		textDetected = strings.TrimSpace(textDetected)
 
 		// 로깅
