@@ -320,6 +320,7 @@ func DetectSponsor(text string, sourceType structure.SponsorType) (bool, float64
 	maxProbability := 0.0
 	isSponsored := false
 	text = strings.ReplaceAll(text, " ", "")
+	utils.DebugLog("협찬 탐지 시작: %s\n", text)
 	// 1. SPECIAL_CASE_PATTERNS 패턴 확인
 	for _, pattern := range structure.SPECIAL_CASE_PATTERNS {
 		// terms1과 terms2 모두 포함하는지 확인
@@ -407,8 +408,8 @@ func DetectSponsor(text string, sourceType structure.SponsorType) (bool, float64
 		}
 	}
 
-	// 합산된 가중치가 Possible 이상이면 스폰서로 판단
-	if totalWeight >= structure.Accuracy.Possible {
+	// 합산된 가중치가 Possible 초과하면 스폰서로 판단
+	if totalWeight > structure.Accuracy.Possible {
 		isSponsored = true
 	}
 
