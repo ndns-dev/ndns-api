@@ -17,6 +17,8 @@ var SPONSOR_DOMAINS = []string{
 	"dinnerqueen.net",
 	"review",
 	"ringble",
+	"강남맛집",
+	"모두모여",
 }
 
 // 네이버 이미지 패턴
