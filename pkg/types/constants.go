@@ -26,6 +26,11 @@ var NAVER_IMAGE_PATTERNS = []string{
 	"phinf.pstatic.net",
 }
 
+// 이미지에서 제외 패턴
+var EXCLUDE_IMAGE_PATTERNS = []string{
+	"simg.pstatic.net", // 네이버 지도 이미지
+}
+
 // 스티커 클래스 패턴
 var STICKER_CLASSES = []string{
 	"se-sticker",

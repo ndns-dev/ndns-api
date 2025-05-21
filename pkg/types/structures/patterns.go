@@ -29,6 +29,10 @@ var SPECIAL_CASE_PATTERNS = []SpecialCasePattern{
 		Terms2: []string{"지원", "원고료", "제공"},
 	},
 	{
+		Terms1: "서비스",
+		Terms2: []string{"제공", "원고료", "작성"},
+	},
+	{
 		Terms1: "광고",
 		Terms2: []string{"콘텐츠", "원고료", "포스팅", "게시물"},
 	},

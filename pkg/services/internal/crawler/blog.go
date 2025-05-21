@@ -267,7 +267,17 @@ func extractFirstImageOnly(doc *goquery.Document, result *structure.CrawlResult)
 				}
 			}
 
-			if !isSticker {
+			// 제외 패턴에 포함된 이미지인지 확인 ex) 네이버 지도 이미지
+			isExcluded := false
+			for _, pattern := range constants.EXCLUDE_IMAGE_PATTERNS {
+				if strings.Contains(imgURL, pattern) {
+					isExcluded = true
+					break
+				}
+			}
+
+			// 스티커가 아니고 제외 패턴에 포함되지 않은 이미지만 추가
+			if !isSticker && !isExcluded {
 				imageURLs = append(imageURLs, imgURL)
 				return // 첫 번째 이미지를 찾았으면 루프 종료
 			}
@@ -621,7 +631,20 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 				err := json.Unmarshal([]byte(linkData), &data)
 				if err == nil && data["src"] != nil {
 					imgURL := data["src"].(string)
-					imageURLs = append(imageURLs, imgURL)
+
+					// 제외 패턴 확인
+					isExcluded := false
+					for _, pattern := range constants.EXCLUDE_IMAGE_PATTERNS {
+						if strings.Contains(imgURL, pattern) {
+							isExcluded = true
+							break
+						}
+					}
+
+					// 제외되지 않은 이미지만 추가
+					if !isExcluded {
+						imageURLs = append(imageURLs, imgURL)
+					}
 				}
 			}
 		}
@@ -631,7 +654,19 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 		if img.Length() > 0 {
 			imgURL := img.AttrOr("src", "")
 			if imgURL != "" {
-				imageURLs = append(imageURLs, imgURL)
+				// 제외 패턴 확인
+				isExcluded := false
+				for _, pattern := range constants.EXCLUDE_IMAGE_PATTERNS {
+					if strings.Contains(imgURL, pattern) {
+						isExcluded = true
+						break
+					}
+				}
+
+				// 제외되지 않은 이미지만 추가
+				if !isExcluded {
+					imageURLs = append(imageURLs, imgURL)
+				}
 			}
 		}
 	})
@@ -647,7 +682,19 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 
 		imgURL := img.AttrOr("src", "")
 		if imgURL != "" {
-			imageURLs = append(imageURLs, imgURL)
+			// 제외 패턴 확인
+			isExcluded := false
+			for _, pattern := range constants.EXCLUDE_IMAGE_PATTERNS {
+				if strings.Contains(imgURL, pattern) {
+					isExcluded = true
+					break
+				}
+			}
+
+			// 제외되지 않은 이미지만 추가
+			if !isExcluded {
+				imageURLs = append(imageURLs, imgURL)
+			}
 		}
 	})
 
@@ -658,8 +705,20 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 		if img.Length() > 0 {
 			imgURL := img.AttrOr("src", "")
 			if imgURL != "" {
-				imageURLs = append(imageURLs, imgURL)
-				return
+				// 제외 패턴 확인
+				isExcluded := false
+				for _, pattern := range constants.EXCLUDE_IMAGE_PATTERNS {
+					if strings.Contains(imgURL, pattern) {
+						isExcluded = true
+						break
+					}
+				}
+
+				// 제외되지 않은 이미지만 추가
+				if !isExcluded {
+					imageURLs = append(imageURLs, imgURL)
+					return
+				}
 			}
 		}
 
@@ -672,7 +731,20 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 				err := json.Unmarshal([]byte(linkData), &data)
 				if err == nil && data["src"] != nil {
 					imgURL := data["src"].(string)
-					imageURLs = append(imageURLs, imgURL)
+
+					// 제외 패턴 확인
+					isExcluded := false
+					for _, pattern := range constants.EXCLUDE_IMAGE_PATTERNS {
+						if strings.Contains(imgURL, pattern) {
+							isExcluded = true
+							break
+						}
+					}
+
+					// 제외되지 않은 이미지만 추가
+					if !isExcluded {
+						imageURLs = append(imageURLs, imgURL)
+					}
 				}
 			}
 		}
@@ -694,7 +766,19 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 		}
 
 		if imgURL != "" && (strings.HasPrefix(imgURL, "http://") || strings.HasPrefix(imgURL, "https://")) {
-			imageURLs = append(imageURLs, imgURL)
+			// 제외 패턴 확인
+			isExcluded := false
+			for _, pattern := range constants.EXCLUDE_IMAGE_PATTERNS {
+				if strings.Contains(imgURL, pattern) {
+					isExcluded = true
+					break
+				}
+			}
+
+			// 제외되지 않은 이미지만 추가
+			if !isExcluded {
+				imageURLs = append(imageURLs, imgURL)
+			}
 		}
 	})
 
