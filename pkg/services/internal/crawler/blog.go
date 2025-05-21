@@ -429,7 +429,7 @@ func extractLastParagraphs(paragraphs []string, maxParagraphs int) []string {
 // extractFirstParagraphOnly는 첫 번째 문단만 추출합니다 (2025년 이후 포스트용)
 func extractFirstParagraphOnly(doc *goquery.Document, result *structure.CrawlResult) {
 	// 최대 3개의 문단 추출
-	paragraphs := extractCommonParagraphs(doc, 3)
+	paragraphs := extractCommonParagraphs(doc, 10)
 
 	// FirstParagraph 설정 - 문단 병합
 	if len(paragraphs) > 0 {
@@ -596,7 +596,6 @@ func extractFirstSticker(doc *goquery.Document, result *structure.CrawlResult) {
 			}
 		})
 	}
-
 	// 결과 설정
 	if len(stickerURLs) > 0 {
 		result.FirstStickerURL = stickerURLs[0]
@@ -604,7 +603,7 @@ func extractFirstSticker(doc *goquery.Document, result *structure.CrawlResult) {
 			// 두 번째 스티커 URL 저장
 			result.SecondStickerURL = stickerURLs[1]
 			// 마지막 스티커는 수집하지 않음 (2025년 이후 포스트)
-			result.LastStickerURL = ""
+			result.LastStickerURL = stickerURLs[len(stickerURLs)-1]
 		} else {
 			result.SecondStickerURL = ""
 			result.LastStickerURL = ""
