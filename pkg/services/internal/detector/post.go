@@ -2,6 +2,7 @@ package detector
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -21,6 +22,7 @@ func processOCR(url string, ocrExtractor _interface.OCRFunc, sourceType structur
 	}
 
 	ocrText, err := ocrExtractor(url)
+
 	if err != nil {
 		errMsg := fmt.Sprintf("OCR 처리 오류: %s", err.Error())
 		utils.DebugLog("OCR 오류: %s\n", err.Error())
@@ -30,6 +32,38 @@ func processOCR(url string, ocrExtractor _interface.OCRFunc, sourceType structur
 	if strings.Contains(ocrText, "context deadline exceeded") || strings.Contains(ocrText, "Get \"") {
 		return false, 0, nil, ocrText
 	}
+
+	trimmedText := strings.TrimSpace(ocrText)
+	textLength := len(trimmedText)
+
+	// 한글 단어(2글자 이상) 포함 확인
+	hangulRegex := regexp.MustCompile(`[가-힣]{2,}`)
+
+	// 스티커 타입에 대한 특별 처리
+	if sourceType == structure.SponsorTypeSticker {
+		// 1. 먼저 스폰서 키워드가 있는지 확인
+		isSponsored, probability, indicators := DetectSponsor(trimmedText, sourceType)
+		if isSponsored {
+			// 스폰서 키워드가 있으면 바로 결과 반환
+			utils.DebugLog("OCR 텍스트에서 스폰서 키워드 발견: %s\n", trimmedText)
+			return isSponsored, probability, indicators, ""
+		}
+
+		// 2. 한글 단어(2글자 이상) 포함 확인
+		if hangulRegex.MatchString(trimmedText) {
+			utils.DebugLog("OCR 텍스트에 한글 단어 포함됨: %s\n", trimmedText)
+			isSponsored, probability, indicators := DetectSponsor(trimmedText, sourceType)
+			return isSponsored, probability, indicators, ""
+		}
+
+		// 3. 위 조건에 모두 해당하지 않고 텍스트가 너무 짧은 경우
+		if textLength < 10 {
+			utils.DebugLog("스티커 OCR 텍스트가 너무 짧고 의미 없음 (%d자): %s\n", textLength, trimmedText)
+			return false, 0, nil, "OCR_TEXT_TOO_SHORT"
+		}
+	}
+
+	// 일반적인 경우 처리
 	isSponsored, probability, indicators := DetectSponsor(ocrText, sourceType)
 	return isSponsored, probability, indicators, ""
 }
@@ -167,7 +201,13 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 					utils.DebugLog("2-2. 첫 번째 스티커 OCR 처리\n")
 					isSponsored, probability, indicators, errMsg := processOCR(crawlResult.FirstStickerURL, ocrExtractor, structure.SponsorTypeSticker)
 
-					if errMsg != "" {
+					// 첫 번째 스티커 OCR 결과가 너무 짧은 경우, 두 번째 스티커 시도
+					if errMsg == "OCR_TEXT_TOO_SHORT" && crawlResult.SecondStickerURL != "" && crawlResult.SecondStickerURL != crawlResult.FirstStickerURL {
+						utils.DebugLog("첫 번째 스티커 OCR 텍스트가 너무 짧아 두 번째 스티커 처리\n")
+						isSponsored, probability, indicators, errMsg = processOCR(crawlResult.SecondStickerURL, ocrExtractor, structure.SponsorTypeSticker)
+					}
+
+					if errMsg != "" && errMsg != "OCR_TEXT_TOO_SHORT" {
 						// 오류 메시지 저장
 						analyzer.UpdateBlogPostWithSponsorInfo(&blogPost, false, 0, nil, errMsg)
 					} else if isSponsored {

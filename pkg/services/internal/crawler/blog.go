@@ -221,8 +221,15 @@ func extractFirstStickerOnly(doc *goquery.Document, result *structure.CrawlResul
 	// 결과 설정
 	if len(stickerURLs) > 0 {
 		result.FirstStickerURL = stickerURLs[0]
-		// 마지막 스티커는 수집하지 않음 (2025년 이후 포스트)
-		result.LastStickerURL = ""
+		if len(stickerURLs) > 1 {
+			// 두 번째 스티커 URL 저장
+			result.SecondStickerURL = stickerURLs[1]
+			// 마지막 스티커는 수집하지 않음 (2025년 이후 포스트)
+			result.LastStickerURL = ""
+		} else {
+			result.SecondStickerURL = ""
+			result.LastStickerURL = ""
+		}
 	}
 }
 
@@ -594,9 +601,13 @@ func extractFirstSticker(doc *goquery.Document, result *structure.CrawlResult) {
 	if len(stickerURLs) > 0 {
 		result.FirstStickerURL = stickerURLs[0]
 		if len(stickerURLs) > 1 {
-			result.LastStickerURL = stickerURLs[len(stickerURLs)-1]
+			// 두 번째 스티커 URL 저장
+			result.SecondStickerURL = stickerURLs[1]
+			// 마지막 스티커는 수집하지 않음 (2025년 이후 포스트)
+			result.LastStickerURL = ""
 		} else {
-			result.LastStickerURL = result.FirstStickerURL
+			result.SecondStickerURL = ""
+			result.LastStickerURL = ""
 		}
 	}
 }

@@ -33,12 +33,13 @@ type BlogPost struct {
 }
 
 type CrawlResult struct {
-	URL             string
-	FirstParagraph  string
-	LastParagraph   string
-	Content         string
-	FirstImageURL   string
-	LastImageURL    string
-	FirstStickerURL string
-	LastStickerURL  string
+	URL              string
+	FirstParagraph   string
+	LastParagraph    string
+	Content          string
+	FirstImageURL    string
+	LastImageURL     string
+	FirstStickerURL  string
+	SecondStickerURL string
+	LastStickerURL   string
 }
