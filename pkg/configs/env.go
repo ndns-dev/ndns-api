@@ -3,16 +3,21 @@ package configs
 import (
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"sync"
 
 	"github.com/spf13/viper"
 )
 
+// 앱 버전을 저장하는 전역 변수
+var AppVersion string
+
 type EnvConfig struct {
 	Server struct {
 		Port      string `mapstructure:"PORT"`
 		WorkerURL string `mapstructure:"WORKER_URL"`
+		AppName   string `mapstructure:"APP_NAME"`
 	}
 	AWS struct {
 		AccessKeyID      string `mapstructure:"AWS_ACCESS_KEY_ID"`
@@ -20,7 +25,9 @@ type EnvConfig struct {
 		Region           string `mapstructure:"AWS_REGION"`
 		DynamoDBEndpoint string `mapstructure:"AWS_DYNAMODB_ENDPOINT"`
 		Tables           struct {
-			OCRCache string `mapstructure:"AWS_DYNAMODB_TABLE_OCR_CACHE"`
+			OCRCache     string `mapstructure:"AWS_DYNAMODB_TABLE_OCR_CACHE"`
+			ServerStatus string `mapstructure:"AWS_DYNAMODB_TABLE_SERVER_STATUS"`
+			Server       string `mapstructure:"AWS_DYNAMODB_TABLE_SERVER"`
 		}
 	}
 	Naver struct {
@@ -39,6 +46,22 @@ var (
 	once           sync.Once
 )
 
+// init 함수에서 VERSION 환경 변수 로드
+func init() {
+	// Makefile 또는 환경에서 설정된 VERSION 환경 변수 사용
+	AppVersion = os.Getenv("VERSION")
+	if AppVersion == "" {
+		AppVersion = "dev" // 기본값 설정
+	}
+
+	// 개발 환경일 경우 항상 "dev"로 설정
+	if os.Getenv("APP_ENV") == "dev" {
+		AppVersion = "dev"
+	}
+
+	fmt.Printf("앱 버전 설정: %s\n", AppVersion)
+}
+
 // loadConfig는 환경 변수를 로드하고 검증하는 내부 함수
 func loadConfig() *EnvConfig {
 	viper.SetConfigFile(".env")
@@ -49,11 +72,10 @@ func loadConfig() *EnvConfig {
 	requiredEnvVars := []string{
 		"PORT",
 		"WORKER_URL",
+		"APP_NAME",
 		"AWS_ACCESS_KEY_ID",
 		"AWS_SECRET_ACCESS_KEY",
 		"AWS_REGION",
-		"AWS_DYNAMODB_ENDPOINT",
-		"AWS_DYNAMODB_TABLE_OCR_CACHE",
 		"NAVER_CLIENT_ID",
 		"NAVER_CLIENT_SECRET",
 	}
@@ -77,18 +99,18 @@ func loadConfig() *EnvConfig {
 	// 환경 변수 키-구조체 필드 매핑 정의
 	config := &EnvConfig{}
 	envMapping := map[string]*string{
-		"PORT":                         &config.Server.Port,
-		"WORKER_URL":                   &config.Server.WorkerURL,
-		"AWS_ACCESS_KEY_ID":            &config.AWS.AccessKeyID,
-		"AWS_SECRET_ACCESS_KEY":        &config.AWS.SecretAccessKey,
-		"AWS_REGION":                   &config.AWS.Region,
-		"AWS_DYNAMODB_ENDPOINT":        &config.AWS.DynamoDBEndpoint,
-		"AWS_DYNAMODB_TABLE_OCR_CACHE": &config.AWS.Tables.OCRCache,
-		"NAVER_CLIENT_ID":              &config.Naver.ClientID,
-		"NAVER_CLIENT_SECRET":          &config.Naver.ClientSecret,
-		"NAVER_SEARCH_URL":             &config.Naver.SearchURL,
-		"OCR_TESSERACT_PATH":           &config.OCR.TesseractPath,
-		"OCR_TEMP_DIR":                 &config.OCR.TempDir,
+		"PORT":                  &config.Server.Port,
+		"WORKER_URL":            &config.Server.WorkerURL,
+		"APP_NAME":              &config.Server.AppName,
+		"AWS_ACCESS_KEY_ID":     &config.AWS.AccessKeyID,
+		"AWS_SECRET_ACCESS_KEY": &config.AWS.SecretAccessKey,
+		"AWS_REGION":            &config.AWS.Region,
+
+		"NAVER_CLIENT_ID":     &config.Naver.ClientID,
+		"NAVER_CLIENT_SECRET": &config.Naver.ClientSecret,
+		"NAVER_SEARCH_URL":    &config.Naver.SearchURL,
+		"OCR_TESSERACT_PATH":  &config.OCR.TesseractPath,
+		"OCR_TEMP_DIR":        &config.OCR.TempDir,
 	}
 
 	fmt.Println("환경 변수 로드 중...")
@@ -106,7 +128,7 @@ func loadConfig() *EnvConfig {
 func GetConfig() *EnvConfig {
 	once.Do(func() {
 		configInstance = loadConfig()
-		fmt.Println("환경 변수 로드 완료")
+		fmt.Printf("환경 변수 로드 완료 (앱 버전: %s)\n", AppVersion)
 	})
 	return configInstance
 }
