@@ -14,20 +14,23 @@ import (
 )
 
 func main() {
+	// 메트릭 초기화
 	utils.InitMetrics()
 
 	app := fiber.New(fiber.Config{
 		AppName: "NDNS-GO Service",
 	})
 
+	// 미들웨어 설정
 	app.Use(recover.New())
 	app.Use(logger.New())
 	app.Use(cors.New())
-	app.Use(middleware.Prometheus())
+	app.Use(middleware.Prometheus()) // 온프레미스 환경에서만 Prometheus 메트릭 수집
 
-	route.SetupRoutes(app)
+	// 라우트 설정
+	route.SetupRoutes(app, false) // false: 서버리스 환경 아님을 표시
 
+	// 서버 시작
 	port := configs.GetConfig().Server.Port
-
 	log.Fatal(app.Listen(":" + port))
 }
