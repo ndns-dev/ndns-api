@@ -1,6 +1,6 @@
 # Go App Info
 APP_NAME := ndns-go
-MAIN_FILE := ./pkg/main.go
+MAIN_FILE := ./cmd/server/main.go
 VERSION := $(shell git rev-parse --short HEAD)
 
 # Docker Info
