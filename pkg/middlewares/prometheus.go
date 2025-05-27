@@ -13,6 +13,9 @@ func Prometheus() fiber.Handler {
 	// 서버 이름을 설정
 	serverName := configs.GetConfig().Server.AppName
 
+	// 메트릭 초기화
+	utils.InitMetrics()
+
 	return func(c *fiber.Ctx) error {
 		// 요청 시작 시간
 		start := time.Now()
@@ -24,15 +27,17 @@ func Prometheus() fiber.Handler {
 		duration := time.Since(start).Seconds()
 
 		// HTTP 메트릭 기록 (요청 수, 응답 시간)
-		method := c.Method()
+		method := string(c.Request().Header.Method())
 		path := c.Route().Path
+		if path == "" {
+			path = "/"
+		}
 		status := c.Response().StatusCode()
 
+		// 메트릭 레이블 정규화
 		utils.RecordRequest(method, path, status, duration)
 
 		// 서버 상태 메트릭 업데이트 (주기적으로 실행)
-		// 모든 요청마다 업데이트하는 것은 비효율적이므로,
-		// 일정 시간(예: 10초)마다 또는 일정 요청 수마다 업데이트
 		updateServerMetrics(serverName)
 
 		return err

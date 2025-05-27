@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -51,23 +52,52 @@ var (
 		Help: "오류 발생 수",
 	}, []string{"service", "type"})
 
-	// ServerLoad는 서버 부하를 측정합니다
-	ServerLoad = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ndns_server_load",
-		Help: "서버 부하 (0-1)",
-	}, []string{"server"})
+	// HTTP 요청 메트릭
+	httpRequestsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "ndns_http_requests_total",
+			Help: "Total number of HTTP requests",
+		},
+		[]string{"method", "path", "status"},
+	)
 
-	// ServerHealthy는 서버 정상 여부를 나타냅니다
-	ServerHealthy = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ndns_server_healthy",
-		Help: "서버 정상 여부 (1=정상, 0=비정상)",
-	}, []string{"server"})
+	// HTTP 응답 시간 메트릭
+	httpResponseTime = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "ndns_http_response_time_seconds",
+			Help:    "HTTP response time in seconds",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"method", "path", "status"},
+	)
 
-	// ServerCapacity는 서버 용량을 측정합니다
-	ServerCapacity = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ndns_server_capacity",
-		Help: "서버 용량 (0-1)",
-	}, []string{"server"})
+	// 서버 상태 메트릭
+	serverLoad = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "ndns_server_load",
+			Help: "Server load (0-1)",
+		},
+		[]string{"server"},
+	)
+
+	serverHealthy = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "ndns_server_healthy",
+			Help: "Server health status (1=healthy, 0=unhealthy)",
+		},
+		[]string{"server"},
+	)
+
+	serverCapacity = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "ndns_server_capacity",
+			Help: "Server capacity (0-1)",
+		},
+		[]string{"server"},
+	)
+
+	metricsInitialized bool
+	initLock           sync.Mutex
 )
 
 // 요청 메트릭 저장을 위한 변수
@@ -82,31 +112,35 @@ var (
 	avgResponseTime      float64
 )
 
-// InitMetrics는 모든 메트릭을 등록합니다
+// InitMetrics initializes all metrics
 func InitMetrics() {
-	// 모든 메트릭을 기본 레지스트리에 등록
-	prometheus.MustRegister(RequestCounter)
-	prometheus.MustRegister(ResponseTime)
-	prometheus.MustRegister(ApiCallCounter)
-	prometheus.MustRegister(ApiResponseTime)
-	prometheus.MustRegister(OcrProcessingTime)
-	prometheus.MustRegister(ErrorCounter)
-	prometheus.MustRegister(ServerLoad)
-	prometheus.MustRegister(ServerHealthy)
-	prometheus.MustRegister(ServerCapacity)
+	initLock.Lock()
+	defer initLock.Unlock()
 
-	// 초기화
-	lastRequestCountTime = time.Now()
+	if metricsInitialized {
+		return
+	}
 
-	// 시스템 메트릭 수집기 시작 코드 제거 (API 호출 방식으로 대체)
+	// 메트릭 등록
+	prometheus.MustRegister(httpRequestsTotal)
+	prometheus.MustRegister(httpResponseTime)
+	prometheus.MustRegister(serverLoad)
+	prometheus.MustRegister(serverHealthy)
+	prometheus.MustRegister(serverCapacity)
 
-	fmt.Println("메트릭 초기화 완료")
+	metricsInitialized = true
+	fmt.Println("Metrics initialized successfully")
 }
 
 // RecordRequest는 HTTP 요청을 기록합니다
 func RecordRequest(method, path string, status int, duration float64) {
-	RequestCounter.WithLabelValues(method, path, fmt.Sprintf("%d", status)).Inc()
-	ResponseTime.WithLabelValues(method, path, fmt.Sprintf("%d", status)).Observe(duration)
+	if !metricsInitialized {
+		return
+	}
+
+	statusStr := strconv.Itoa(status)
+	httpRequestsTotal.WithLabelValues(method, path, statusStr).Inc()
+	httpResponseTime.WithLabelValues(method, path, statusStr).Observe(duration)
 
 	// 요청 속도 및 응답 시간 계산을 위한 데이터 업데이트
 	requestCountMutex.Lock()
@@ -188,14 +222,14 @@ func GetSystemMetrics() (float64, float64) {
 	return cpuUsage, memoryUsage
 }
 
-// UpdateServerMetric은 서버 메트릭을 Prometheus에 업데이트합니다
+// UpdateServerMetric updates server metrics
 func UpdateServerMetric(serverName string, metricName string, value float64) {
 	switch metricName {
 	case "load":
-		ServerLoad.WithLabelValues(serverName).Set(value)
+		serverLoad.WithLabelValues(serverName).Set(value)
 	case "healthy":
-		ServerHealthy.WithLabelValues(serverName).Set(value)
+		serverHealthy.WithLabelValues(serverName).Set(value)
 	case "capacity":
-		ServerCapacity.WithLabelValues(serverName).Set(value)
+		serverCapacity.WithLabelValues(serverName).Set(value)
 	}
 }
