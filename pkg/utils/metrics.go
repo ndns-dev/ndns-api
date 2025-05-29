@@ -2,12 +2,12 @@ package utils
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sh5080/ndns-go/pkg/configs"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/mem"
 )
@@ -19,7 +19,7 @@ var (
 			Name: "process_cpu_usage",
 			Help: "CPU usage percentage of the process",
 		},
-		[]string{"instance"},
+		[]string{"job", "instance"},
 	)
 
 	// 메모리 사용량
@@ -28,7 +28,7 @@ var (
 			Name: "process_memory_usage",
 			Help: "Memory usage percentage of the process",
 		},
-		[]string{"instance"},
+		[]string{"job", "instance"},
 	)
 
 	// HTTP 요청 메트릭
@@ -38,7 +38,7 @@ var (
 			Help:    "HTTP request duration in seconds",
 			Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
 		},
-		[]string{"instance", "method", "path", "status"},
+		[]string{"job", "instance", "method", "path", "status"},
 	)
 
 	// 에러 카운터 메트릭
@@ -103,9 +103,9 @@ func RecordRequest(method, path string, status int, duration float64) {
 		return
 	}
 
+	instance, job := GetInstanceName()
 	statusStr := strconv.Itoa(status)
-	instance := GetInstanceName()
-	httpRequestsSeconds.WithLabelValues(instance, method, path, statusStr).Observe(duration)
+	httpRequestsSeconds.WithLabelValues(job, instance, method, path, statusStr).Observe(duration)
 }
 
 // RecordError records error metrics
@@ -113,23 +113,20 @@ func RecordError(service, errorType string) {
 	if !metricsInitialized {
 		return
 	}
-	instance := GetInstanceName()
-	errorTotal.WithLabelValues(instance, service, errorType).Inc()
+	instance, job := GetInstanceName()
+	errorTotal.WithLabelValues(job, instance, service, errorType).Inc()
 }
 
-// GetInstanceName returns the instance name (usually APP_URL)
-func GetInstanceName() string {
-	// 환경변수에서 APP_URL을 가져오거나 기본값 사용
-	instance := os.Getenv("APP_URL")
-	if instance == "" {
-		instance = "localhost"
-	}
-	return instance
+// GetInstanceName returns the instance name and job name
+func GetInstanceName() (string, string) {
+	instance := configs.GetConfig().Server.AppURL
+	job := configs.GetConfig().Server.AppName
+	return instance, job
 }
 
 // collectSystemMetrics continuously collects system metrics
 func collectSystemMetrics() {
-	instance := GetInstanceName()
+	instance, job := GetInstanceName()
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
@@ -137,10 +134,10 @@ func collectSystemMetrics() {
 		cpuUsage, memUsage := GetSystemMetrics()
 
 		// CPU 사용량 업데이트 (백분율)
-		processCpuUsage.WithLabelValues(instance).Set(cpuUsage * 100)
+		processCpuUsage.WithLabelValues(job, instance).Set(cpuUsage * 100)
 
 		// 메모리 사용량 업데이트 (백분율)
-		processMemoryUsage.WithLabelValues(instance).Set(memUsage * 100)
+		processMemoryUsage.WithLabelValues(job, instance).Set(memUsage * 100)
 	}
 }
 
@@ -169,19 +166,11 @@ func GetSystemMetrics() (float64, float64) {
 	return cpuUsage, memoryUsage
 }
 
-// UpdateServerMetric updates server status metrics
-func UpdateServerMetric(serverName, metricName string, value float64) {
-	if !metricsInitialized {
-		return
-	}
-	serverMetrics.WithLabelValues(serverName, metricName).Set(value)
-}
-
 // RecordOcrProcessingTime records OCR processing duration
 func RecordOcrProcessingTime(duration float64) {
 	if !metricsInitialized {
 		return
 	}
-	instance := GetInstanceName()
-	ocrProcessingTime.WithLabelValues(instance).Observe(duration)
+	instance, job := GetInstanceName()
+	ocrProcessingTime.WithLabelValues(job, instance).Observe(duration)
 }
