@@ -113,8 +113,8 @@ func RecordError(service, errorType string) {
 	if !metricsInitialized {
 		return
 	}
-	instance, job := GetInstanceName()
-	errorTotal.WithLabelValues(job, instance, service, errorType).Inc()
+	instance, _ := GetInstanceName()
+	errorTotal.WithLabelValues(instance, service, errorType).Inc()
 }
 
 // GetInstanceName returns the instance name and job name
@@ -171,6 +171,6 @@ func RecordOcrProcessingTime(duration float64) {
 	if !metricsInitialized {
 		return
 	}
-	instance, job := GetInstanceName()
-	ocrProcessingTime.WithLabelValues(job, instance).Observe(duration)
+	instance, _ := GetInstanceName()
+	ocrProcessingTime.WithLabelValues(instance).Observe(duration)
 }
