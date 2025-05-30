@@ -6,7 +6,7 @@ INSTANCE_NAME=$1
 KEY_PATH=$2
 SSH_USER=${3:-$USER}
 PROJECT_ID=${4:-$(gcloud config get-value project)}
-ZONE=${5:-us-central1-c}
+ZONE=${5:-us-central1-f}
 
 if [[ -z "$INSTANCE_NAME" || -z "$KEY_PATH" ]]; then
   echo "Usage: $0 <INSTANCE_NAME> <KEY_PATH> [SSH_USER] [PROJECT_ID] [ZONE]"
