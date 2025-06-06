@@ -55,7 +55,9 @@ fi
 
 echo "✅ Health OK. Updating NGINX..."
 sed "s/{{PORT}}/$NEXT_PORT/g" $NGINX_TEMPLATE_PATH | sudo tee $NGINX_CONF_PATH > /dev/null
-sudo nginx -t && sudo systemctl reload nginx
+sudo nginx -t && {
+  sudo systemctl reload nginx || sudo service nginx reload
+}
 
 echo "♻️ Swapping containers..."
 docker rm -f $OLD_API_CONTAINER || true
