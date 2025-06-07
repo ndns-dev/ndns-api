@@ -63,14 +63,5 @@ echo "♻️ Swapping containers..."
 docker rm -f $OLD_API_CONTAINER || true
 docker rename $NEW_API_CONTAINER $OLD_API_CONTAINER
 
-# === 모니터링 서비스 업데이트 ===
-echo "📊 Updating Prometheus & Grafana with docker-compose..."
-
-# 기존 컨테이너 제거 (이름 충돌 방지)
-docker rm -f grafana prometheus 2>/dev/null || true
-
-docker compose -f $COMPOSE_FILE pull prometheus grafana
-docker compose -f $COMPOSE_FILE up -d prometheus grafana
-
 
 echo "✅ All services updated."
