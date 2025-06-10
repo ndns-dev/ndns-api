@@ -403,8 +403,8 @@ func (o *OCRImpl) runOCR(ctx context.Context, imagePath string, imageURL string)
 		fmt.Printf("변환된 OCR 텍스트: %s\n", textDetected)
 
 		// 결과가 너무 길면 잘라서 반환
-		if len(textDetected) > 100 {
-			resultCh <- textDetected[:100]
+		if len(textDetected) > 1000 {
+			resultCh <- textDetected[:1000]
 		} else {
 			resultCh <- textDetected
 		}
@@ -416,8 +416,8 @@ func (o *OCRImpl) runOCR(ctx context.Context, imagePath string, imageURL string)
 		return result, nil
 	case <-time.After(50 * time.Millisecond):
 		fmt.Println("텍스트 정리 시간 초과: 원본 텍스트 반환")
-		if len(textDetected) > 100 {
-			return textDetected[:100], nil
+		if len(textDetected) > 1000 {
+			return textDetected[:1000], nil
 		}
 		return textDetected, nil
 	}
