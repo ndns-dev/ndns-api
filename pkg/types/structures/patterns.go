@@ -36,6 +36,10 @@ var SPECIAL_CASE_PATTERNS = []SpecialCasePattern{
 		Terms1: "광고",
 		Terms2: []string{"콘텐츠", "원고료", "포스팅", "게시물"},
 	},
+	{
+		Terms1: "로부터",
+		Terms2: []string{"하였습니다", "받았습니다"},
+	},
 }
 
 // 2번 확인 패턴: EXACT_SPONSOR_KEYWORDS_PATTERNS는 정확한 스폰서 키워드 패턴을 정의합니다
