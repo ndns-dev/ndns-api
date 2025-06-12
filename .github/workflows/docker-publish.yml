@@ -13,9 +13,6 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v3
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -30,11 +27,6 @@ jobs:
         with:
           context: .
           push: true
-          platforms: linux/arm64,linux/amd64
-          tags: |
-            ${{ secrets.DOCKER_USERNAME }}/ndns-go:latest
-            ${{ secrets.DOCKER_USERNAME }}/ndns-go:${{ github.sha }}
+          tags: ${{ secrets.DOCKER_USERNAME }}/ndns-go:latest
           build-args: |
             BUILD_VERSION=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
