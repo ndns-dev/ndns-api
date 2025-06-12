@@ -38,7 +38,7 @@ var SPECIAL_CASE_PATTERNS = []SpecialCasePattern{
 	},
 	{
 		Terms1: "로부터",
-		Terms2: []string{"하였습니다", "받았습니다"},
+		Terms2: []string{"업체", "작성", "하였", "받았"},
 	},
 }
 
