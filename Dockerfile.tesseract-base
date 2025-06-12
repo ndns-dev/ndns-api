@@ -1,0 +1,82 @@
+# Tesseract 5.5.0 베이스 이미지
+FROM ubuntu:22.04
+
+# 기본 환경 설정
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=Asia/Seoul
+
+WORKDIR /app
+
+# 최신 ImageMagick 및 Tesseract 빌드에 필요한 패키지 설치
+RUN apt-get update && apt-get upgrade -y && \
+    apt-get install -y \
+    ca-certificates \
+    file \
+    curl \
+    build-essential \
+    libicu-dev \
+    libxml2-dev \
+    libcurl4-openssl-dev \
+    libarchive-dev \
+    git \
+    libtool \
+    pkg-config \
+    automake \
+    libpng-dev \
+    libjpeg-dev \
+    libtiff-dev \
+    libwebp-dev \
+    libopenjp2-7-dev \
+    libgomp1 \
+    libfontconfig1-dev \
+    libfreetype6-dev \
+    libxext-dev \
+    libx11-dev \
+    && apt-get remove -y tesseract-ocr tesseract-ocr-eng tesseract-ocr-kor || true \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# ImageMagick 7.1.1 설치
+RUN curl -L https://github.com/ImageMagick/ImageMagick/archive/7.1.1-47.tar.gz -o ImageMagick.tar.gz && \
+    tar xvzf ImageMagick.tar.gz && \
+    cd ImageMagick-7.1.1-47 && \
+    ./configure --enable-hdri=yes && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    cd .. && \
+    rm -rf ImageMagick-7.1.1-47 ImageMagick.tar.gz
+
+# Leptonica 1.85.0 설치
+RUN curl -L https://github.com/DanBloomberg/leptonica/releases/download/1.85.0/leptonica-1.85.0.tar.gz -o leptonica-1.85.0.tar.gz && \
+    tar -xzf leptonica-1.85.0.tar.gz && \
+    cd leptonica-1.85.0 && \
+    ./configure && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    cd .. && \
+    rm -rf leptonica-1.85.0 leptonica-1.85.0.tar.gz
+
+# Tesseract 5.5.0 소스 다운로드 및 빌드
+RUN curl -L https://github.com/tesseract-ocr/tesseract/archive/5.5.0.tar.gz -o tesseract-5.5.0.tar.gz && \
+    tar -xzf tesseract-5.5.0.tar.gz && \
+    cd tesseract-5.5.0 && \
+    ./autogen.sh && \
+    ./configure && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    cd .. && \
+    rm -rf tesseract-5.5.0 tesseract-5.5.0.tar.gz
+
+# tessdata 디렉토리 생성 및 로컬의 tessdata 복사
+RUN mkdir -p /usr/local/share/tessdata
+
+# 로컬의 tessdata를 복사 (빌드 시점에 tessdata 디렉토리가 현재 디렉토리에 있어야 함)
+COPY tessdata/* /usr/local/share/tessdata/
+
+# 환경 변수 설정
+ENV PATH="/usr/local/bin:/usr/bin:${PATH}"
+ENV TESSDATA_PREFIX="/usr/local/share/tessdata"
+

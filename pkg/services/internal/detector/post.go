@@ -41,17 +41,8 @@ func processOCR(url string, ocrExtractor _interface.OCRFunc, sourceType structur
 
 	// 스티커 타입에 대한 특별 처리
 	if sourceType == structure.SponsorTypeSticker {
-		// 1. 먼저 스폰서 키워드가 있는지 확인
-		isSponsored, probability, indicators := DetectSponsor(trimmedText, sourceType)
-		if isSponsored {
-			// 스폰서 키워드가 있으면 바로 결과 반환
-			utils.DebugLog("OCR 텍스트에서 스폰서 키워드 발견: %s\n", trimmedText)
-			return isSponsored, probability, indicators, ""
-		}
-
-		// 2. 한글 단어(2글자 이상) 포함 확인
+		// 1. 먼저 한글 텍스트가 있는지 확인
 		if hangulRegex.MatchString(trimmedText) {
-			utils.DebugLog("OCR 텍스트에 한글 단어 포함됨: %s\n", trimmedText)
 			isSponsored, probability, indicators := DetectSponsor(trimmedText, sourceType)
 			return isSponsored, probability, indicators, ""
 		}
