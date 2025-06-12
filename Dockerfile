@@ -1,19 +1,26 @@
-
-# 빌더 스테이지
-FROM golang:1.24.2 AS builder
+# 의존성 스테이지
+FROM --platform=linux/amd64 golang:1.24.2 AS deps
 
 WORKDIR /app
 
-# Go 모듈 파일 복사 및 의존성 다운로드
-COPY go.mod go.sum ./
-RUN go mod download
+# 의존성 파일 복사
+COPY go.mod ./
 
-# 소스 코드 복사 및 빌드
+# 의존성 다운로드 및 검증
+RUN go mod download && \
+    go mod tidy
+
+# 빌더 스테이지
+FROM deps AS builder
+
+# 소스 코드 복사
 COPY . .
+
+# 빌드
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o ndns-go ./cmd/server/main.go
 
 # 런타임 스테이지
-FROM sh5080/tesseract:latest
+FROM --platform=linux/amd64 sh5080/tesseract:latest AS runtime
 
 WORKDIR /app
 
