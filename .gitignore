@@ -10,7 +10,6 @@ bin/
 _test/
 
 # Go Modules 관련
-go.sum
 vendor/
 
 # 임시 파일 및 디렉토리 (에디터, IDE 관련)
