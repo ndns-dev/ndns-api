@@ -47,9 +47,9 @@ docker-build-skip-go:
 docker-run:
 	docker run --platform $(PLATFORM) --env-file .env -p $(PORT):$(PORT) $(APP_NAME)
 
-# Docker 내부 테서랙트 확인
-docker-test-tesseract:
-	docker run --rm $(APP_NAME) bash -c "which tesseract && tesseract --version && tesseract --list-langs"
+docker-push-cloudrun:
+	docker build -t gcr.io/axial-analyzer-460001-p3/ndns-go-cloudrun -f Dockerfile.cloudrun .
+	gcloud builds submit --config=cloudbuild.yaml .
 
 # Docker 쉘 진입
 docker-shell:

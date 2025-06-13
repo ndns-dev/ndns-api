@@ -17,7 +17,7 @@ steps:
       - '--image'
       - 'gcr.io/$PROJECT_ID/ndns-go-cloudrun'
       - '--region'
-      - 'asia-northeast3'
+      - 'asia-northeast1'
       - '--platform'
       - 'managed'
       - '--allow-unauthenticated'
@@ -26,9 +26,9 @@ steps:
       - '--cpu'
       - '1'
       - '--port'
-      - '8080'
+      - '8085'
       - '--set-env-vars'
-      - 'APP_ENV=prod,APP_NAME=ndns-api2'
+      - 'APP_ENV=prod,APP_NAME=ndns-api3'
 
 images:
   - 'gcr.io/$PROJECT_ID/ndns-go-cloudrun' 

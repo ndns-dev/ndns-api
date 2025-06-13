@@ -1,10 +1,11 @@
-# 빌드 스테이지
-FROM golang:1.21-alpine AS builder
+# 빌더 스테이지
+FROM golang:1.24.2 AS builder
 
 WORKDIR /app
 
 # 필요한 빌드 도구 설치
-RUN apk add --no-cache git
+# golang:1.24.2는 Debian 기반이므로 'apk' 대신 'apt-get'을 사용합니다.
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
 # 의존성 파일 복사 및 다운로드
 COPY go.mod go.sum ./
@@ -14,23 +15,22 @@ RUN go mod download
 COPY . .
 
 # Cloud Run 바이너리 빌드
-RUN CGO_ENABLED=0 GOOS=linux go build -o /cloudrun ./cmd/cloudrun/main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o cloudrun ./cmd/cloudrun/main.go
 
-# 실행 스테이지
-FROM alpine:latest
+# 런타임 스테이지
+FROM sh5080/tesseract:latest
 
 WORKDIR /app
 
-# 타임존 설정
-RUN apk add --no-cache tzdata
-ENV TZ=Asia/Seoul
+# builder 스테이지에서 빌드된 cloudrun 바이너리 복사
+COPY --from=builder /app/cloudrun .
 
-# 실행 파일 복사
-COPY --from=builder /cloudrun .
+# 실행 권한 설정
+RUN chmod +x /app/cloudrun
 
 # 환경 변수 설정
-ENV PORT=8080
+ENV PORT=8085
 ENV APP_ENV=prod
 
 # 실행
-CMD ["./cloudrun"] 
+CMD ["./cloudrun"]
