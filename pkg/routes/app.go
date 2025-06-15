@@ -12,4 +12,6 @@ func SetupAppRoutes(app *fiber.App) {
 
 	// 메트릭 API
 	app.Get("/metrics", controller.Metrics())
+
+	app.Get("/ngrok", controller.Ngrok())
 }

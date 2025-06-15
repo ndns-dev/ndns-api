@@ -1,4 +1,4 @@
-package naver
+package client
 
 import (
 	"encoding/json"
