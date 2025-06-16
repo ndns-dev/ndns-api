@@ -2,89 +2,132 @@
 import json
 import time
 from locust import HttpUser, task, between, events
-from collections import defaultdict
 import logging
+import statistics
+from collections import defaultdict
+import hashlib
+import glob
+import os
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 응답 패턴을 저장할 전역 딕셔너리 (Locust의 Master/Worker 모드에서 집계될 때 사용)
-# defaultdict를 사용하여 새로운 패턴이 등장하면 자동으로 초기화되도록 설정
+# 테스트 시작 시간과 응답 데이터를 저장할 전역 변수
+test_start_time = None
+response_times = []
+total_requests = 0
 response_patterns = defaultdict(lambda: {
     "count": 0,
-    "firstSeen": None,
-    "lastSeen": None,
-    "sampleResponse": {}
+    "first_seen": None,
+    "last_seen": None,
+    "sample": None,
+    "response_times": [],
+    "errors": []
 })
 
-# 응답 JSON 본문을 일관된 문자열(해시)로 변환하는 함수
-# JSON 키 순서가 중요하지 않다면, sort_keys=True를 사용하여 일관성 보장
-def canonicalize_json(json_data):
-    return json.dumps(json_data, sort_keys=True, ensure_ascii=False)
+def get_response_hash(response_data):
+    """응답 데이터의 해시값을 생성"""
+    try:
+        # 정렬된 JSON 문자열로 변환하여 일관된 해시 생성
+        json_str = json.dumps(response_data, sort_keys=True)
+        return hashlib.md5(json_str.encode()).hexdigest()[:8]
+    except Exception as e:
+        return f"error_{str(e)[:20]}"
+
+def get_next_file_number():
+    """다음 파일 번호를 찾음"""
+    files = glob.glob("performance_summary*.json")
+    if not files:
+        return 1
+    
+    numbers = []
+    for file in files:
+        try:
+            num = int(file.replace("performance_summary", "").replace(".json", ""))
+            numbers.append(num)
+        except ValueError:
+            continue
+    
+    return max(numbers) + 1 if numbers else 1
 
 class ApiUser(HttpUser):
     # 테스트할 기본 URL (k6의 BASE_URL과 동일)
-    host = "http://localhost:8085"
-    # 각 요청 사이에 1초 대기 (k6의 sleep(1)과 유사)
-    wait_time = between(1, 1)
+    # host = "http://localhost:8085"
+    # host = "https://route.ndns.site"
+    host = "http://182.217.147.28:8085"
+    # OCR 처리 시간을 고려하여 사용자 대기 시간을 12-15초로 설정
+    wait_time = between(12, 15)
 
     SEARCH_QUERY = "병점 맛집"
 
-    @task
-    def health_check(self):
-        self.client.get("/health", name="/health") # name으로 요청을 그룹화하여 통계에 표시
+    def on_start(self):
+        """사용자 세션이 시작될 때 호출"""
+        pass
+
+    def on_stop(self):
+        """사용자 세션이 종료될 때 호출"""
+        pass
 
     @task
     def search_api(self):
-        # 검색 API 호출
-        response = self.client.get(
+        global total_requests
+        total_requests += 1
+        start_time = time.time()
+        
+        with self.client.get(
             f"/api/v1/search?query={self.SEARCH_QUERY}&limit=10&offset=0",
-            name="/api/v1/search" # name으로 요청을 그룹화하여 통계에 표시
-        )
+            name="/api/v1/search",
+            catch_response=True
+        ) as response:
+            response_time = time.time() - start_time
+            response_times.append(response_time)
 
-        if response.status_code == 200:
             try:
-                # 응답 본문 파싱
-                response_body = response.json()
-                # 응답 본문을 정규화된 JSON 문자열로 변환 (패턴 식별용)
-                pattern_hash = canonicalize_json(response_body)
-
-                # 현재 시간 기록 (여기서는 직접적인 사용은 없지만, on_request_completion에서 사용될 수 있음)
-                current_time = time.time()
-
-                # 응답 패턴 집계는 on_request_completion 핸들러에서 이루어집니다.
-                # 이 task 내부에서는 HTTP 요청 자체의 성공 여부만 확인합니다.
-
-            except json.JSONDecodeError:
-                logger.error(f"Failed to decode JSON from response: {response.text}")
+                if response.status_code == 200:
+                    response_data = response.json()
+                    pattern_hash = get_response_hash(response_data)
+                else:
+                    # 에러 응답도 패턴으로 처리
+                    pattern_hash = f"error_{response.status_code}"
+                    response_data = {"error": f"HTTP {response.status_code}: {response.text}"}
+            except json.JSONDecodeError as e:
+                pattern_hash = "error_json_decode"
+                response_data = {"error": f"JSON 디코딩 에러: {str(e)}"}
             except Exception as e:
-                logger.error(f"Error processing response: {e}")
-        else:
-            logger.error(f"Search API returned status {response.status_code}: {response.text}")
+                pattern_hash = f"error_unexpected_{type(e).__name__}"
+                response_data = {"error": f"예상치 못한 에러: {str(e)}"}
+
+            # 모든 요청에 대해 패턴 정보 업데이트
+            pattern = response_patterns[pattern_hash]
+            if pattern["count"] == 0:
+                pattern["first_seen"] = time.time()
+                pattern["sample"] = response_data
+                logger.info(f"\n🆕 새로운 응답 패턴 발견! (패턴: {pattern_hash})")
+                
+            pattern["count"] += 1
+            pattern["last_seen"] = time.time()
+            pattern["response_times"].append(response_time)
+
+            # OCR 처리 시간이 너무 길 경우 (15초 초과) 실패로 처리
+            if response_time > 15:
+                error_msg = f"응답 시간 초과: {response_time:.2f}초"
+                pattern["errors"].append(error_msg)
+                response.failure(error_msg)
+            elif response.status_code != 200:
+                error_msg = f"HTTP {response.status_code}: {response.text}"
+                pattern["errors"].append(error_msg)
+                response.failure(error_msg)
+            else:
+                response.success()
 
 # --- Locust 이벤트 핸들러 ---
-# on_request_completion 함수는 이제 일반 함수로 정의됩니다.
-# request 이벤트에 이 함수를 등록하여 성공/실패 요청 모두 처리합니다.
 def on_request_completion(request_type, name, response_time, response_length, response, exception, **kwargs):
-    # 'request' 이벤트는 성공/실패 모두에 대해 발생하므로,
-    # 성공한 검색 API 요청에 대해서만 패턴을 집계합니다.
+    # 이벤트 핸들러에서는 패턴 카운팅을 하지 않고 로깅만 수행
     if name == "/api/v1/search" and response.status_code == 200 and exception is None:
         try:
             response_body = response.json()
-            pattern_hash = canonicalize_json(response_body)
-            
-            # 응답 패턴 업데이트
-            if response_patterns[pattern_hash]["count"] == 0:
-                response_patterns[pattern_hash]["firstSeen"] = time.time()
-                response_patterns[pattern_hash]["sampleResponse"] = response_body # 샘플 응답 저장 (너무 크면 문제)
-                logger.info(f"\n🆕 New response pattern found! (Hash: {pattern_hash[:30]}...)")
-                logger.info(f"Sample response: {json.dumps(response_body, indent=2, ensure_ascii=False)}")
-                logger.info("-------------------------------------")
-            
-            response_patterns[pattern_hash]["count"] += 1
-            response_patterns[pattern_hash]["lastSeen"] = time.time()
-
+            logger.debug(f"Response received: {json.dumps(response_body, indent=2, ensure_ascii=False)}")
         except json.JSONDecodeError:
             logger.error(f"Failed to decode JSON in request completion handler: {response.text}")
         except Exception as e:
@@ -97,57 +140,98 @@ def on_locust_init(environment, **kwargs):
     # request_success 대신 request 이벤트를 사용합니다.
     environment.events.request.add_listener(on_request_completion)
 
+# 테스트 시작 시 호출되는 이벤트 핸들러
+@events.test_start.add_listener
+def on_test_start(**kwargs):
+    global test_start_time, response_times, response_patterns, total_requests
+    test_start_time = time.time()
+    response_times = []
+    total_requests = 0
+    response_patterns.clear()
+    logger.info("🚀 부하 테스트 시작")
 
-# 테스트가 종료될 때 실행되는 함수
+# 테스트 종료 시 호출되는 이벤트 핸들러
 @events.test_stop.add_listener
-def on_test_stop(environment, **kwargs):
-    logger.info("\n📊 Test Summary for Response Patterns")
-    logger.info("======================================")
-
-    total_search_requests = 0
-    for pattern_info in response_patterns.values():
-        total_search_requests += pattern_info["count"]
-
-    if not response_patterns:
-        logger.info("No search API responses collected for pattern analysis.")
+def on_test_stop(**kwargs):
+    if not response_times:
+        logger.info("수집된 테스트 데이터가 없습니다")
         return
 
-    # 결과 요약 데이터 준비
-    summary_data = {
-        "query": ApiUser.SEARCH_QUERY,
-        "total_search_requests": total_search_requests,
-        "total_unique_patterns": len(response_patterns),
-        "test_start_time": time.strftime('%Y-%m-%dT%H:%M:%S%Z', time.localtime(environment.start_time)),
-        "test_end_time": time.strftime('%Y-%m-%dT%H:%M:%S%Z', time.localtime(time.time())),
-        "patterns": []
+    # 기본 성능 통계 계산
+    avg_response_time = statistics.mean(response_times)
+    median_response_time = statistics.median(response_times)
+    p95_response_time = statistics.quantiles(response_times, n=20)[18]  # 95th percentile
+    min_response_time = min(response_times)
+    max_response_time = max(response_times)
+
+    # 응답 패턴 분석
+    patterns_summary = []
+    pattern_total_count = sum(pattern["count"] for pattern in response_patterns.values())
+    
+    for pattern_id, data in response_patterns.items():
+        pattern_avg_time = statistics.mean(data["response_times"]) if data["response_times"] else 0
+        
+        patterns_summary.append({
+            "pattern_id": pattern_id,
+            "count": data["count"],
+            "percentage": f"{(data['count'] / total_requests * 100):.1f}%",
+            "avg_response_time": f"{pattern_avg_time:.2f}s",
+            "first_seen": time.strftime('%Y-%m-%dT%H:%M:%S%Z', time.localtime(data["first_seen"])),
+            "last_seen": time.strftime('%Y-%m-%dT%H:%M:%S%Z', time.localtime(data["last_seen"])),
+            "sample": data["sample"],
+            "error_count": len(data["errors"]),
+            "recent_errors": data["errors"][-5:] if data["errors"] else []  # 최근 5개 에러만 저장
+        })
+
+    # 결과 요약
+    summary = {
+        "performance_metrics": {
+            "average_response_time": f"{avg_response_time:.2f}s",
+            "median_response_time": f"{median_response_time:.2f}s",
+            "p95_response_time": f"{p95_response_time:.2f}s",
+            "min_response_time": f"{min_response_time:.2f}s",
+            "max_response_time": f"{max_response_time:.2f}s",
+            "total_requests": total_requests,
+            "pattern_total_count": pattern_total_count
+        },
+        "test_duration": {
+            "start_time": time.strftime('%Y-%m-%dT%H:%M:%S%Z', time.localtime(test_start_time)),
+            "end_time": time.strftime('%Y-%m-%dT%H:%M:%S%Z', time.localtime(time.time())),
+            "duration_seconds": f"{time.time() - test_start_time:.2f}"
+        },
+        "response_patterns": patterns_summary
     }
 
-    # 각 패턴 정보 추가
-    label_index = 0
-    for pattern_hash, pattern_info in response_patterns.items():
-        # 패턴 레이블은 단순히 순번으로 부여
-        label_index += 1
-
-        summary_data["patterns"].append({
-            "label": f"Pattern {label_index}",
-            "count": pattern_info["count"],
-            "percentage": f"{((pattern_info['count'] / total_search_requests) * 100):.2f}%" if total_search_requests > 0 else "0.00%",
-            "firstSeen": time.strftime('%Y-%m-%dT%H:%M:%S%Z', time.localtime(pattern_info["firstSeen"])) if pattern_info["firstSeen"] else None,
-            "lastSeen": time.strftime('%Y-%m-%dT%H:%M:%S%Z', time.localtime(pattern_info["lastSeen"])),
-            "responseSample": pattern_info["sampleResponse"]
-        })
-        
-        logger.info(f"\n🏷 Pattern {label_index}:")
-        logger.info(f"   Count: {pattern_info['count']} times")
-        logger.info(f"   Percentage: {((pattern_info['count'] / total_search_requests) * 100):.2f}%")
-        logger.info(f"   First Seen: {time.strftime('%Y-%m-%dT%H:%M:%S%Z', time.localtime(pattern_info['firstSeen'])) if pattern_info['firstSeen'] else 'N/A'}")
-        logger.info(f"   Last Seen: {time.strftime('%Y-%m-%dT%H:%M:%S%Z', time.localtime(pattern_info['lastSeen']))}")
-        logger.info(f"   Sample Response: {json.dumps(pattern_info['sampleResponse'], indent=2, ensure_ascii=False).splitlines()[0]}...")
-
-
-    # 결과를 JSON 파일로 저장
-    output_filename = "response_patterns_summary.json"
-    with open(output_filename, "w", encoding="utf-8") as f:
-        json.dump(summary_data, f, indent=2, ensure_ascii=False)
+    # 결과 출력
+    logger.info("\n📊 성능 테스트 요약")
+    logger.info("===================")
+    logger.info(f"총 요청 수: {total_requests}")
+    logger.info(f"패턴별 응답 합계: {pattern_total_count}")
+    logger.info(f"평균 응답 시간: {summary['performance_metrics']['average_response_time']}")
+    logger.info(f"중간값 응답 시간: {summary['performance_metrics']['median_response_time']}")
+    logger.info(f"95번째 백분위 응답 시간: {summary['performance_metrics']['p95_response_time']}")
+    logger.info(f"최소 응답 시간: {summary['performance_metrics']['min_response_time']}")
+    logger.info(f"최대 응답 시간: {summary['performance_metrics']['max_response_time']}")
     
-    logger.info(f"\n✅ Response patterns summary saved to {output_filename}")
+    logger.info("\n📋 응답 패턴 분석")
+    logger.info("===================")
+    for pattern in patterns_summary:
+        pattern_type = "성공" if not pattern["pattern_id"].startswith("error") else "실패"
+        logger.info(f"\n패턴 {pattern['pattern_id']} ({pattern_type}):")
+        logger.info(f"  발생 횟수: {pattern['count']} ({pattern['percentage']})")
+        logger.info(f"  평균 응답 시간: {pattern['avg_response_time']}")
+        if pattern["error_count"] > 0:
+            logger.info(f"  에러 횟수: {pattern['error_count']}")
+            logger.info("  최근 에러:")
+            for error in pattern["recent_errors"]:
+                logger.info(f"    - {error}")
+
+    # 다음 파일 번호 가져오기
+    next_num = get_next_file_number()
+    filename = f"performance_summary{next_num}.json"
+
+    # JSON 파일로 저장
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2, ensure_ascii=False)
+    
+    logger.info(f"\n✅ 성능 테스트 결과가 {filename} 파일에 저장되었습니다")
