@@ -3,7 +3,6 @@ package crawler
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"regexp"
 	"strings"
@@ -62,45 +61,41 @@ func CrawlBlogPost(url string, is2025OrLater bool) (*structure.CrawlResult, erro
 
 // fetchHTML은 URL에서 HTML을 가져와 goquery.Document로 반환합니다
 func fetchHTML(url string) (*goquery.Document, error) {
-	// HTTP 요청 생성
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("요청 생성 실패: %v", err)
-	}
+	var (
+		resp *http.Response
+		err  error
+	)
 
-	// 요청 헤더 추가 (브라우저 에뮬레이션)
-	req.Header.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
-	req.Header.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
-	req.Header.Add("Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7")
-
-	// 요청 실행
 	client := &http.Client{
-		Timeout: time.Second * 10,
+		Timeout: constants.TIMEOUT,
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("요청 실행 실패: %v", err)
+
+	// 재시도 로직 구현
+	for attempt := 0; attempt < constants.CRAWL_MAX_RETRIES; attempt++ {
+		if attempt > 0 {
+			time.Sleep(constants.CRAWL_RETRY_DELAY)
+		}
+
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("요청 생성 실패: %v", err)
+		}
+
+		// User-Agent 설정
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+
+		resp, err = client.Do(req)
+		if err == nil {
+			break
+		}
+
+		if attempt == constants.CRAWL_MAX_RETRIES-1 {
+			return nil, fmt.Errorf("요청 실행 실패 (%d번째 시도): %v", attempt+1, err)
+		}
 	}
 	defer resp.Body.Close()
 
-	// 응답 상태 확인
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP 오류 (%d)", resp.StatusCode)
-	}
-
-	// HTML 내용 읽기
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("응답 본문 읽기 실패: %v", err)
-	}
-	bodyHTML := string(bodyBytes)
-
-	if len(bodyHTML) == 0 {
-		return nil, fmt.Errorf("응답 HTML이 비어있습니다")
-	}
-
-	// HTML 파싱을 위해 Reader 생성
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(bodyHTML))
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("HTML 파싱 실패: %v", err)
 	}
@@ -110,34 +105,24 @@ func fetchHTML(url string) (*goquery.Document, error) {
 
 // extractNaverIframeURL은 네이버 블로그 프레임셋에서 실제 콘텐츠 iframe URL을 추출합니다
 func extractNaverIframeURL(doc *goquery.Document, originalURL string) string {
-	// mainFrame의 src 속성 확인
-	iframeSrc := ""
-	doc.Find("#mainFrame, iframe[name='mainFrame']").Each(func(i int, s *goquery.Selection) {
-		if src, exists := s.Attr("src"); exists && src != "" {
-			iframeSrc = src
-			return
+	iframeURL := ""
+	doc.Find("iframe#mainFrame").Each(func(i int, s *goquery.Selection) {
+		if src, exists := s.Attr("src"); exists {
+			iframeURL = src
 		}
 	})
 
-	// src가 상대 경로인 경우 절대 경로로 변환
-	if iframeSrc != "" && !strings.HasPrefix(iframeSrc, "http") {
-		if strings.HasPrefix(iframeSrc, "/") {
-			// 도메인만 추출
-			urlParts := strings.Split(originalURL, "/")
-			domain := ""
-			if len(urlParts) >= 3 {
-				domain = urlParts[0] + "//" + urlParts[2]
-			} else {
-				domain = "https://blog.naver.com"
-			}
-			iframeSrc = domain + iframeSrc
-		} else {
-			// 기본 도메인 사용
-			iframeSrc = "https://blog.naver.com/" + iframeSrc
-		}
+	if iframeURL == "" {
+		return originalURL
 	}
 
-	return iframeSrc
+	// 상대 경로를 절대 경로로 변환
+	if !strings.HasPrefix(iframeURL, "http") {
+		baseURL := "https://blog.naver.com"
+		iframeURL = baseURL + iframeURL
+	}
+
+	return iframeURL
 }
 
 // parseNaverBlogFirst는 네이버 블로그 HTML에서 첫 번째 데이터만 파싱합니다 (2025년 이후)
@@ -453,60 +438,6 @@ func cleanText(text string) string {
 	text = regex.ReplaceAllString(text, " ")
 
 	return strings.TrimSpace(text)
-}
-
-// min은 두 정수 중 작은 값을 반환합니다
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-// parseTistoryBlog는 티스토리 블로그 HTML을 파싱합니다
-func parseTistoryBlog(doc *goquery.Document, result *structure.CrawlResult) {
-	// 이미지 추출
-	doc.Find("article img, .article img, .entry-content img").Each(func(i int, s *goquery.Selection) {
-		if i == 0 && result.FirstImageURL == "" {
-			if src, exists := s.Attr("src"); exists {
-				result.FirstImageURL = src
-			}
-		}
-	})
-
-	// 첫 문단 추출
-	doc.Find("article p, .article p, .entry-content p").Each(func(i int, s *goquery.Selection) {
-		if i == 0 && result.FirstParagraph == "" {
-			text := strings.TrimSpace(s.Text())
-			if text != "" {
-				// HTML 태그 제거
-				result.FirstParagraph = utils.RemoveHTMLTags(text)
-			}
-		}
-	})
-}
-
-// parseGenericBlog는 일반 블로그 HTML을 파싱합니다
-func parseGenericBlog(doc *goquery.Document, result *structure.CrawlResult) {
-	// 이미지 추출
-	doc.Find("article img, .article img, .content img, .post img, .entry img").Each(func(i int, s *goquery.Selection) {
-		if i == 0 && result.FirstImageURL == "" {
-			if src, exists := s.Attr("src"); exists {
-				result.FirstImageURL = src
-			}
-		}
-	})
-
-	// 첫 문단 추출
-	doc.Find("article p, .article p, .content p, .post p, .entry p").Each(func(i int, s *goquery.Selection) {
-		if i == 0 && result.FirstParagraph == "" {
-			text := strings.TrimSpace(s.Text())
-			if text != "" {
-				// HTML 태그 제거
-				result.FirstParagraph = utils.RemoveHTMLTags(text)
-			}
-		}
-	})
 }
 
 // normalizeURL은 URL을 정규화합니다
