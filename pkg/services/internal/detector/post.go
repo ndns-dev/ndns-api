@@ -2,10 +2,13 @@ package detector
 
 import (
 	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/sh5080/ndns-go/pkg/configs"
 	_interface "github.com/sh5080/ndns-go/pkg/interfaces"
 	"github.com/sh5080/ndns-go/pkg/services/internal/analyzer"
 	"github.com/sh5080/ndns-go/pkg/services/internal/crawler"
@@ -14,14 +17,33 @@ import (
 	"github.com/sh5080/ndns-go/pkg/utils"
 )
 
+// PostImpl는 포스트 감지 서비스 구현체입니다
+type PostImpl struct {
+	_interface.Service
+	ocrService _interface.OCRService
+}
+
+// NewPostService는 새 포스트 감지 서비스를 생성합니다
+func NewPostService(ocrService _interface.OCRService) _interface.PostService {
+	return &PostImpl{
+		Service: _interface.Service{
+			Client: &http.Client{
+				Timeout: time.Second * 30,
+			},
+			Config: configs.GetConfig(),
+		},
+		ocrService: ocrService,
+	}
+}
+
 // OCR 처리 공통 함수
-func processOCR(url string, ocrExtractor _interface.OCRFunc, sourceType structure.SponsorType) (bool, float64, []structure.SponsorIndicator, string) {
+func (s *PostImpl) processOCR(url string, sourceType structure.SponsorType) (bool, float64, []structure.SponsorIndicator, string) {
 	// URL이 비어있으면 처리 건너뜀
 	if url == "" {
 		return false, 0, nil, ""
 	}
 
-	ocrText, err := ocrExtractor(url)
+	ocrText, err := s.ocrService.ExtractTextFromImage(url)
 
 	if err != nil {
 		errMsg := fmt.Sprintf("OCR 처리 오류: %s", err.Error())
@@ -59,8 +81,8 @@ func processOCR(url string, ocrExtractor _interface.OCRFunc, sourceType structur
 	return isSponsored, probability, indicators, ""
 }
 
-// DetectTextInPosts는 여러 포스트에서 동시에 협찬 관련 텍스트를 탐지합니다
-func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interface.OCRFunc) []structure.BlogPost {
+// DetectPosts는 여러 포스트에서 동시에 협찬 관련 텍스트를 탐지합니다
+func (s *PostImpl) DetectPosts(posts []structure.NaverSearchItem) ([]structure.BlogPost, error) {
 	// 결과를 저장할 슬라이스 초기화
 	results := make([]structure.BlogPost, len(posts))
 
@@ -176,7 +198,7 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 				// 2-1. 첫 번째 이미지 OCR 처리
 				if crawlResult.FirstImageURL != "" && !blogPost.IsSponsored && blogPost.Error == "" {
 					utils.DebugLog("2-1. 첫 번째 이미지 OCR 처리\n")
-					isSponsored, probability, indicators, errMsg := processOCR(crawlResult.FirstImageURL, ocrExtractor, structure.SponsorTypeImage)
+					isSponsored, probability, indicators, errMsg := s.processOCR(crawlResult.FirstImageURL, structure.SponsorTypeImage)
 
 					if errMsg != "" {
 						// 오류 메시지 저장
@@ -190,12 +212,12 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 				// 2-2. 첫 번째 스티커 OCR 처리 (첫 번째 이미지에서 스폰서가 발견되지 않은 경우)
 				if crawlResult.FirstStickerURL != "" && !blogPost.IsSponsored && blogPost.Error == "" {
 					utils.DebugLog("2-2. 첫 번째 스티커 OCR 처리\n")
-					isSponsored, probability, indicators, errMsg := processOCR(crawlResult.FirstStickerURL, ocrExtractor, structure.SponsorTypeSticker)
+					isSponsored, probability, indicators, errMsg := s.processOCR(crawlResult.FirstStickerURL, structure.SponsorTypeSticker)
 
 					// 첫 번째 스티커 OCR 결과가 너무 짧은 경우, 두 번째 스티커 시도
 					if errMsg == "OCR_TEXT_TOO_SHORT" && crawlResult.SecondStickerURL != "" && crawlResult.SecondStickerURL != crawlResult.FirstStickerURL {
 						utils.DebugLog("첫 번째 스티커 OCR 텍스트가 너무 짧아 두 번째 스티커 처리\n")
-						isSponsored, probability, indicators, errMsg = processOCR(crawlResult.SecondStickerURL, ocrExtractor, structure.SponsorTypeSticker)
+						isSponsored, probability, indicators, errMsg = s.processOCR(crawlResult.SecondStickerURL, structure.SponsorTypeSticker)
 					}
 
 					if errMsg != "" && errMsg != "OCR_TEXT_TOO_SHORT" {
@@ -244,7 +266,7 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 								})
 							} else {
 								// 협찬 도메인이 아닌 경우 OCR 처리 진행
-								isSponsored, probability, indicators, errMsg := processOCR(crawlResult.LastStickerURL, ocrExtractor, structure.SponsorTypeSticker)
+								isSponsored, probability, indicators, errMsg := s.processOCR(crawlResult.LastStickerURL, structure.SponsorTypeSticker)
 
 								if errMsg != "" {
 									// 오류 메시지 저장
@@ -276,7 +298,7 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 								})
 							} else {
 								// 협찬 도메인이 아닌 경우 OCR 처리 진행
-								isSponsored, probability, indicators, errMsg := processOCR(crawlResult.LastImageURL, ocrExtractor, structure.SponsorTypeImage)
+								isSponsored, probability, indicators, errMsg := s.processOCR(crawlResult.LastImageURL, structure.SponsorTypeImage)
 
 								if errMsg != "" {
 									// 오류 메시지 저장
@@ -303,7 +325,7 @@ func DetectTextInPosts(posts []structure.NaverSearchItem, ocrExtractor _interfac
 	// 모든 고루틴이 완료될 때까지 대기
 	wg.Wait()
 
-	return results
+	return results, nil
 }
 
 // DetectSponsor는 텍스트에서 협찬 여부를 감지합니다

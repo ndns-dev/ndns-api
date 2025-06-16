@@ -11,7 +11,7 @@ import (
 )
 
 // Search는 검색 요청을 처리하는 핸들러입니다
-func Search(searchService _interface.SearchService, sponsorService _interface.SponsorService) fiber.Handler {
+func Search(searchService _interface.SearchService, postService _interface.PostService) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		queries := c.Queries()
 		var req requestDto.SearchQuery

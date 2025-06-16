@@ -11,13 +11,13 @@ import (
 func NewServiceContainer() *_interface.ServiceContainer {
 	searchService := api.NewSearchService()
 	ocrService := detector.NewOCRService()
-	sponsorService := detector.NewSponsorService()
+	postService := detector.NewPostService(ocrService)
 	ocrRepository := repository.NewOCRRepository()
 
 	return &_interface.ServiceContainer{
-		SearchService:  searchService,
-		OCRService:     ocrService,
-		SponsorService: sponsorService,
-		OCRRepository:  ocrRepository,
+		SearchService: searchService,
+		OCRService:    ocrService,
+		PostService:   postService,
+		OCRRepository: ocrRepository,
 	}
 }

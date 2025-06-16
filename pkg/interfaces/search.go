@@ -11,10 +11,10 @@ type SearchService interface {
 	SearchBlogPosts(req request.SearchQuery) ([]structure.BlogPost, int, error)
 }
 
-// SponsorService는 스폰서 감지 서비스 인터페이스입니다
-type SponsorService interface {
-	// DetectSponsor는 블로그 포스트에서 스폰서를 감지합니다
-	DetectSponsor(posts []structure.NaverSearchItem) ([]structure.BlogPost, error)
+// PostService는 포스트 감지 서비스 인터페이스입니다
+type PostService interface {
+	// DetectPosts는 블로그 포스트에서 협찬 관련 텍스트를 감지합니다
+	DetectPosts(posts []structure.NaverSearchItem) ([]structure.BlogPost, error)
 }
 
 // CrawlerService는 블로그 콘텐츠를 크롤링하는 인터페이스입니다
