@@ -314,11 +314,6 @@ func (o *OCRImpl) downloadImage(imageURL string) (string, error) {
 			// 크롭된 이미지가 원본과 다르면 원본 제거하고 크롭된 이미지 사용
 			os.Remove(tempFilePath)
 			tempFilePath = croppedPath
-
-			// 새 이미지 크기 확인
-			if newDimensions, err := utils.GetImageDimensions(tempFilePath); err == nil {
-				fmt.Printf("최적화된 이미지 크기: %dx%d\n", newDimensions.Width, newDimensions.Height)
-			}
 		}
 	} else {
 		fmt.Printf("이미지 차원 확인 실패 (계속 진행): %v\n", err)
