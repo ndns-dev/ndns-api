@@ -38,119 +38,14 @@ func NewOCRService() _interface.OCRService {
 
 // ExtractTextFromImage는 이미지 URL에서 텍스트를 추출합니다
 func (o *OCRImpl) ExtractTextFromImage(imageURL string) (string, error) {
-	// 시작 시간 기록 (메트릭용)
-	startTime := time.Now()
-	serviceType := "image_ocr"
-
-	if imageURL == "" {
-		utils.RecordError(serviceType, "empty_url")
-		return "", fmt.Errorf("이미지 URL이 비어 있습니다")
+	// 동기적으로 처리
+	tempFile, err := o.downloadImage(imageURL)
+	if err != nil {
+		return "", err
 	}
+	defer os.Remove(tempFile)
 
-	// GIF 파일인지 빠르게 확인 (URL 기반)
-	if strings.Contains(strings.ToLower(imageURL), ".gif") {
-		return "[GIF 파일은 OCR 미지원]", nil
-	}
-
-	// 캐시 확인
-	// if o.ocrRepo != nil {
-	// 	cache, err := o.ocrRepo.GetOCRCache(imageURL)
-	// 	if err == nil && cache != nil && cache.TextDetected != "" {
-	// 		// 캐시 히트 메트릭 기록
-	// 		utils.Info(serviceType, "캐시 히트: %s", imageURL)
-	// 		fmt.Printf("cache.TextDetected: %s\n", cache.TextDetected)
-	// 		return cache.TextDetected, nil
-	// 	}
-	// }
-
-	// 상위 컨텍스트 생성 (최대 처리 시간 제한)
-	parentCtx, parentCancel := context.WithTimeout(context.Background(), constants.TIMEOUT)
-	defer parentCancel()
-
-	// 비동기 처리를 위한 채널
-	resultCh := make(chan struct {
-		text string
-		err  error
-	})
-
-	// 비동기로 이미지 다운로드 및 OCR 처리
-	go func() {
-		// 이미지 다운로드
-		utils.Info(serviceType, "이미지 다운로드 시작: %s", imageURL)
-		tempFile, err := o.downloadImage(imageURL)
-		if err != nil {
-			utils.Error(serviceType, "이미지 다운로드 실패 [URL: %s]: %v", imageURL, err)
-			utils.RecordError(serviceType, "download_failed")
-			resultCh <- struct {
-				text string
-				err  error
-			}{"", err}
-			return
-		}
-		defer os.Remove(tempFile) // 임시 파일 정리
-
-		// 상위 컨텍스트가 취소되었는지 확인
-		select {
-		case <-parentCtx.Done():
-			// 이미 상위 컨텍스트가 취소된 경우
-			return
-		default:
-			// 계속 진행
-		}
-
-		// OCR 실행 (상위 컨텍스트 전달)
-		textDetected, err := o.runOCR(parentCtx, tempFile, imageURL)
-
-		// 상위 컨텍스트가 취소되었는지 다시 확인
-		select {
-		case <-parentCtx.Done():
-			// 이미 상위 컨텍스트가 취소된 경우
-			return
-		default:
-			// 결과 채널에 전송
-			resultCh <- struct {
-				text string
-				err  error
-			}{textDetected, err}
-		}
-	}()
-
-	// 타임아웃 또는 결과 대기
-	select {
-	case <-parentCtx.Done():
-		// 타임아웃 발생
-		timeoutErr := fmt.Sprintf("[OCR 처리 시간 초과 (%s)]", constants.TIMEOUT)
-		utils.RecordError("image_ocr_timeout", "OCR 처리 시간 초과")
-		return timeoutErr, nil
-	case result := <-resultCh:
-		// 총 처리 시간 기록 (메트릭용)
-		duration := time.Since(startTime).Seconds()
-		// 메트릭 기록 - 별도 함수를 사용하여 확실히 실행되도록
-		utils.RecordOcrProcessingTime(duration)
-		utils.Info(serviceType, "OCR 처리 완료 - 소요 시간: %.2f초", duration)
-
-		// 결과 반환
-		if result.err != nil {
-			errorMsg := fmt.Sprintf("OCR 처리 실패: %v", result.err)
-			utils.Error(serviceType, "처리 실패 [URL: %s]: %s", imageURL, errorMsg)
-			utils.RecordError(serviceType, "processing_failed")
-
-			// OCR 오류 로그 데이터 저장
-			utils.OCRErrorLog("PROCESSING_FAILED", imageURL, result.err.Error())
-
-			return "[" + errorMsg + "]", nil
-		}
-
-		// OCR 결과 캐싱
-		if o.ocrRepo != nil && result.text != "" {
-			// 비동기 저장 (결과에 영향 없음)
-			go func() {
-				_ = o.ocrRepo.SaveOCRCache(imageURL, result.text, "image")
-			}()
-		}
-
-		return result.text, nil
-	}
+	return o.runOCR(context.Background(), tempFile, imageURL)
 }
 
 // downloadImage는 이미지 URL에서 이미지를 다운로드합니다
@@ -372,48 +267,28 @@ func (o *OCRImpl) runOCR(ctx context.Context, imagePath string, imageURL string)
 
 	fmt.Printf("최종 OCR 결과: 성공 (총 실행 시간: %v)\n", time.Since(startTime))
 
-	// 결과 정리 작업은 별도의 goroutine으로 처리하여 빠르게 반환
-	resultCh := make(chan string, 1)
-
-	go func() {
-		// 한글이 시작되는 부분부터 추출하지 않고 모든 텍스트 유지 (협찬 태그에 영문/특수문자가 포함될 수 있음)
-		// 다만 앞부분에 Tesseract 경고 메시지 등이 있다면 제거
-		if strings.Contains(textDetected, "Warning:") {
-			parts := strings.SplitN(textDetected, "Warning:", 2)
-			if len(parts) > 1 {
-				// Warning 이후 부분에서 다음 줄바꿈 이후의 텍스트만 사용
-				warningParts := strings.SplitN(parts[1], "\n", 2)
-				if len(warningParts) > 1 {
-					textDetected = warningParts[1]
-				}
+	// 텍스트 정리 작업을 동기적으로 처리
+	if strings.Contains(textDetected, "Warning:") {
+		parts := strings.SplitN(textDetected, "Warning:", 2)
+		if len(parts) > 1 {
+			warningParts := strings.SplitN(parts[1], "\n", 2)
+			if len(warningParts) > 1 {
+				textDetected = warningParts[1]
 			}
 		}
-
-		// 줄바꿈 제거 및 공백 정리
-		textDetected = strings.ReplaceAll(textDetected, "\n", " ")
-		textDetected = strings.Join(strings.Fields(textDetected), " ") // 연속된 공백 하나로
-		textDetected = strings.TrimSpace(textDetected)
-
-		// 로깅
-		fmt.Printf("변환된 OCR 텍스트: %s\n", textDetected)
-
-		// 결과가 너무 길면 잘라서 반환
-		if len(textDetected) > 1000 {
-			resultCh <- textDetected[:1000]
-		} else {
-			resultCh <- textDetected
-		}
-	}()
-
-	// 최대 50ms 내에 정리 작업 완료되지 않으면 원본 결과 반환
-	select {
-	case result := <-resultCh:
-		return result, nil
-	case <-time.After(50 * time.Millisecond):
-		fmt.Println("텍스트 정리 시간 초과: 원본 텍스트 반환")
-		if len(textDetected) > 1000 {
-			return textDetected[:1000], nil
-		}
-		return textDetected, nil
 	}
+
+	// 줄바꿈 제거 및 공백 정리
+	textDetected = strings.ReplaceAll(textDetected, "\n", " ")
+	textDetected = strings.Join(strings.Fields(textDetected), " ")
+	textDetected = strings.TrimSpace(textDetected)
+
+	// 로깅
+	fmt.Printf("변환된 OCR 텍스트: %s\n", textDetected)
+
+	// 결과가 너무 길면 잘라서 반환
+	if len(textDetected) > 1000 {
+		return textDetected[:1000], nil
+	}
+	return textDetected, nil
 }
