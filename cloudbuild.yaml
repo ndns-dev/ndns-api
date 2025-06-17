@@ -9,7 +9,7 @@ steps:
 
   # Cloud Run에 배포
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: gcloud
+    entrypoint: 'gcloud'
     args:
       - 'run'
       - 'deploy'
@@ -27,8 +27,11 @@ steps:
       - '1'
       - '--port'
       - '8085'
-      - '--set-env-vars'
-      - 'APP_ENV=prod,APP_NAME=ndns-api3'
+      - '--set-secrets=WORKER_URL=WORKER_URL:latest,APP_NAME=APP_NAME:latest,APP_URL=APP_URL:latest,AWS_ACCESS_KEY_ID=AWS_ACCESS_KEY_ID:latest,AWS_SECRET_ACCESS_KEY=AWS_SECRET_ACCESS_KEY:latest,AWS_REGION=AWS_REGION:latest,NAVER_CLIENT_ID=NAVER_CLIENT_ID:latest,NAVER_CLIENT_SECRET=NAVER_CLIENT_SECRET:latest'
+      - '--timeout'
+      - '300s'
+      - '--min-instances'
+      - '1'
 
 images:
-  - 'gcr.io/$PROJECT_ID/ndns-go-cloudrun' 
+  - 'gcr.io/$PROJECT_ID/ndns-go-cloudrun'

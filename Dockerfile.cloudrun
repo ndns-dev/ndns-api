@@ -4,7 +4,6 @@ FROM golang:1.24.2 AS builder
 WORKDIR /app
 
 # 필요한 빌드 도구 설치
-# golang:1.24.2는 Debian 기반이므로 'apk' 대신 'apt-get'을 사용합니다.
 RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
 # 의존성 파일 복사 및 다운로드
@@ -23,14 +22,11 @@ FROM sh5080/tesseract:latest
 WORKDIR /app
 
 # builder 스테이지에서 빌드된 cloudrun 바이너리 복사
-COPY --from=builder /app/cloudrun .
+COPY --from=builder /app/cloudrun /app/cloudrun
 
-# 실행 권한 설정
-RUN chmod +x /app/cloudrun
+RUN chmod 755 /app/cloudrun
 
-# 환경 변수 설정
-ENV PORT=8085
-ENV APP_ENV=prod
+EXPOSE 8085
 
-# 실행
-CMD ["./cloudrun"]
+# 실행 (절대 경로 사용)
+CMD ["/app/cloudrun"]
