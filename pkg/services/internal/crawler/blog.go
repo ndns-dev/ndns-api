@@ -15,20 +15,20 @@ import (
 	"github.com/sh5080/ndns-go/pkg/utils"
 )
 
-// CrawlBlogPost는 블로그 포스트 URL에서 콘텐츠를 크롤링합니다
+// CrawlAnalyzedResponse는 블로그 포스트 Url에서 콘텐츠를 크롤링합니다
 // is2025OrLater가 true일 경우 마지막 데이터는 가져오지 않습니다.
-func CrawlBlogPost(url string, is2025OrLater bool) (*structure.CrawlResult, error) {
+func CrawlAnalyzedResponse(url string, is2025OrLater bool) (*structure.CrawlResult, error) {
 	if url == "" {
-		return nil, fmt.Errorf("URL이 비어 있습니다")
+		return nil, fmt.Errorf("Url이 비어 있습니다")
 	}
 
-	// URL 정규화
-	url = normalizeURL(url)
+	// Url 정규화
+	url = normalizeUrl(url)
 	utils.DebugLog("크롤링 시작: %s (2025년 이후 포스트: %v)\n", url, is2025OrLater)
 
 	// 결과 초기화
 	result := &structure.CrawlResult{
-		URL: url,
+		Url: url,
 	}
 
 	// 네이버 블로그인 경우 특별 처리
@@ -39,10 +39,10 @@ func CrawlBlogPost(url string, is2025OrLater bool) (*structure.CrawlResult, erro
 			return nil, fmt.Errorf("프레임셋 페이지 가져오기 실패: %v", err)
 		}
 
-		// iframe 태그에서 실제 콘텐츠 URL 추출
-		iframeURL := extractNaverIframeURL(framesetDoc, url)
-		if iframeURL != "" {
-			contentDoc, err := fetchHTML(iframeURL)
+		// iframe 태그에서 실제 콘텐츠 Url 추출
+		iframeUrl := extractNaverIframeUrl(framesetDoc, url)
+		if iframeUrl != "" {
+			contentDoc, err := fetchHTML(iframeUrl)
 			if err != nil {
 				return nil, fmt.Errorf("iframe 내부 콘텐츠 가져오기 실패: %v", err)
 			}
@@ -59,7 +59,7 @@ func CrawlBlogPost(url string, is2025OrLater bool) (*structure.CrawlResult, erro
 	return result, nil
 }
 
-// fetchHTML은 URL에서 HTML을 가져와 goquery.Document로 반환합니다
+// fetchHTML은 Url에서 HTML을 가져와 goquery.Document로 반환합니다
 func fetchHTML(url string) (*goquery.Document, error) {
 	var (
 		resp *http.Response
@@ -103,26 +103,26 @@ func fetchHTML(url string) (*goquery.Document, error) {
 	return doc, nil
 }
 
-// extractNaverIframeURL은 네이버 블로그 프레임셋에서 실제 콘텐츠 iframe URL을 추출합니다
-func extractNaverIframeURL(doc *goquery.Document, originalURL string) string {
-	iframeURL := ""
+// extractNaverIframeUrl은 네이버 블로그 프레임셋에서 실제 콘텐츠 iframe Url을 추출합니다
+func extractNaverIframeUrl(doc *goquery.Document, originalUrl string) string {
+	iframeUrl := ""
 	doc.Find("iframe#mainFrame").Each(func(i int, s *goquery.Selection) {
 		if src, exists := s.Attr("src"); exists {
-			iframeURL = src
+			iframeUrl = src
 		}
 	})
 
-	if iframeURL == "" {
-		return originalURL
+	if iframeUrl == "" {
+		return originalUrl
 	}
 
 	// 상대 경로를 절대 경로로 변환
-	if !strings.HasPrefix(iframeURL, "http") {
-		baseURL := "https://blog.naver.com"
-		iframeURL = baseURL + iframeURL
+	if !strings.HasPrefix(iframeUrl, "http") {
+		baseUrl := "https://blog.naver.com"
+		iframeUrl = baseUrl + iframeUrl
 	}
 
-	return iframeURL
+	return iframeUrl
 }
 
 // parseNaverBlogFirst는 네이버 블로그 HTML에서 첫 번째 데이터만 파싱합니다 (2025년 이후)
@@ -147,8 +147,8 @@ func parseNaverBlogFull(doc *goquery.Document, result *structure.CrawlResult) {
 
 // extractFirstStickerOnly는 첫 번째 스티커만 추출합니다 (2025년 이후 포스트용)
 func extractFirstStickerOnly(doc *goquery.Document, result *structure.CrawlResult) {
-	// 모든 스티커 URL을 저장할 슬라이스
-	var stickerURLs []string
+	// 모든 스티커 Url을 저장할 슬라이스
+	var stickerUrls []string
 
 	// 1. 스티커 클래스로 찾기
 	for _, stickerClass := range constants.STICKER_CLASSES {
@@ -156,40 +156,40 @@ func extractFirstStickerOnly(doc *goquery.Document, result *structure.CrawlResul
 			// 이미지 태그 찾기
 			img := elem.Find("img")
 			if img.Length() > 0 && img.AttrOr("src", "") != "" {
-				imgURL := img.AttrOr("src", "")
+				imgUrl := img.AttrOr("src", "")
 				// 스티커 도메인 확인
 				for _, domain := range constants.STICKER_DOMAINS {
-					if strings.Contains(imgURL, domain) {
-						stickerURLs = append(stickerURLs, imgURL)
+					if strings.Contains(imgUrl, domain) {
+						stickerUrls = append(stickerUrls, imgUrl)
 						break
 					}
 				}
 			}
 
 			// 첫 번째 스티커를 찾았으면 루프 종료
-			if len(stickerURLs) > 0 {
+			if len(stickerUrls) > 0 {
 				return
 			}
 		})
 
-		if len(stickerURLs) > 0 {
+		if len(stickerUrls) > 0 {
 			break
 		}
 	}
 
 	// 2. data-linkdata 속성으로 찾기 (네이버 블로그 특유의 구조)
-	if len(stickerURLs) == 0 {
+	if len(stickerUrls) == 0 {
 		doc.Find("[data-linkdata]").Each(func(i int, elem *goquery.Selection) {
 			linkData := elem.AttrOr("data-linkdata", "")
 			if linkData != "" {
 				var data map[string]interface{}
 				err := json.Unmarshal([]byte(linkData), &data)
 				if err == nil && data["src"] != nil {
-					imgURL := data["src"].(string)
+					imgUrl := data["src"].(string)
 					// 스티커 도메인 확인
 					for _, domain := range constants.STICKER_DOMAINS {
-						if strings.Contains(imgURL, domain) {
-							stickerURLs = append(stickerURLs, imgURL)
+						if strings.Contains(imgUrl, domain) {
+							stickerUrls = append(stickerUrls, imgUrl)
 							break
 						}
 					}
@@ -197,31 +197,31 @@ func extractFirstStickerOnly(doc *goquery.Document, result *structure.CrawlResul
 			}
 
 			// 첫 번째 스티커를 찾았으면 루프 종료
-			if len(stickerURLs) > 0 {
+			if len(stickerUrls) > 0 {
 				return
 			}
 		})
 	}
 
 	// 결과 설정
-	if len(stickerURLs) > 0 {
-		result.FirstStickerURL = stickerURLs[0]
-		if len(stickerURLs) > 1 {
-			// 두 번째 스티커 URL 저장
-			result.SecondStickerURL = stickerURLs[1]
+	if len(stickerUrls) > 0 {
+		result.FirstStickerUrl = stickerUrls[0]
+		if len(stickerUrls) > 1 {
+			// 두 번째 스티커 Url 저장
+			result.SecondStickerUrl = stickerUrls[1]
 			// 마지막 스티커는 수집하지 않음 (2025년 이후 포스트)
-			result.LastStickerURL = ""
+			result.LastStickerUrl = ""
 		} else {
-			result.SecondStickerURL = ""
-			result.LastStickerURL = ""
+			result.SecondStickerUrl = ""
+			result.LastStickerUrl = ""
 		}
 	}
 }
 
 // extractFirstImageOnly는 첫 번째 이미지만 추출합니다 (2025년 이후 포스트용)
 func extractFirstImageOnly(doc *goquery.Document, result *structure.CrawlResult) {
-	// 모든 이미지 URL을 저장할 슬라이스
-	var imageURLs []string
+	// 모든 이미지 Url을 저장할 슬라이스
+	var imageUrls []string
 
 	// 본문 영역 찾기
 	var contentArea *goquery.Selection
@@ -244,16 +244,16 @@ func extractFirstImageOnly(doc *goquery.Document, result *structure.CrawlResult)
 			return // 스티커 관련 요소 내부의 이미지는 건너뜀
 		}
 
-		imgURL := img.AttrOr("src", "")
-		if imgURL == "" {
-			imgURL = img.AttrOr("data-src", "")
+		imgUrl := img.AttrOr("src", "")
+		if imgUrl == "" {
+			imgUrl = img.AttrOr("data-src", "")
 		}
 
-		if imgURL != "" {
+		if imgUrl != "" {
 			// 이미지가 스티커가 아닌지 확인
 			isSticker := false
 			for _, domain := range constants.STICKER_DOMAINS {
-				if strings.Contains(imgURL, domain) {
+				if strings.Contains(imgUrl, domain) {
 					isSticker = true
 					break
 				}
@@ -262,7 +262,7 @@ func extractFirstImageOnly(doc *goquery.Document, result *structure.CrawlResult)
 			// 제외 패턴에 포함된 이미지인지 확인 ex) 네이버 지도 이미지
 			isExcluded := false
 			for _, pattern := range constants.EXCLUDE_IMAGE_PATTERNS {
-				if strings.Contains(imgURL, pattern) {
+				if strings.Contains(imgUrl, pattern) {
 					isExcluded = true
 					break
 				}
@@ -270,20 +270,20 @@ func extractFirstImageOnly(doc *goquery.Document, result *structure.CrawlResult)
 
 			// 스티커가 아니고 제외 패턴에 포함되지 않은 이미지만 추가
 			if !isSticker && !isExcluded {
-				imageURLs = append(imageURLs, imgURL)
+				imageUrls = append(imageUrls, imgUrl)
 				return // 첫 번째 이미지를 찾았으면 루프 종료
 			}
 		}
 	})
 
 	// 결과 설정
-	if len(imageURLs) > 0 {
-		result.FirstImageURL = imageURLs[0]
+	if len(imageUrls) > 0 {
+		result.FirstImageUrl = imageUrls[0]
 		// 마지막 이미지는 수집하지 않음 (2025년 이후 포스트)
-		result.LastImageURL = ""
+		result.LastImageUrl = ""
 	}
-	if strings.HasSuffix(result.FirstImageURL, "w80_blur") {
-		result.FirstImageURL = strings.Replace(result.FirstImageURL, "w80_blur", "w773", 1)
+	if strings.HasSuffix(result.FirstImageUrl, "w80_blur") {
+		result.FirstImageUrl = strings.Replace(result.FirstImageUrl, "w80_blur", "w773", 1)
 	}
 }
 
@@ -440,8 +440,8 @@ func cleanText(text string) string {
 	return strings.TrimSpace(text)
 }
 
-// normalizeURL은 URL을 정규화합니다
-func normalizeURL(url string) string {
+// normalizeUrl은 Url을 정규화합니다
+func normalizeUrl(url string) string {
 	// HTTP/HTTPS 접두사 추가
 	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
 		url = "https://" + url
@@ -451,8 +451,8 @@ func normalizeURL(url string) string {
 
 // extractFirstSticker는 첫 번째와 마지막 스티커를 추출합니다
 func extractFirstSticker(doc *goquery.Document, result *structure.CrawlResult) {
-	// 모든 스티커 URL을 저장할 슬라이스
-	var stickerURLs []string
+	// 모든 스티커 Url을 저장할 슬라이스
+	var stickerUrls []string
 
 	// 1. 스티커 클래스로 찾기
 	for _, stickerClass := range constants.STICKER_CLASSES {
@@ -460,11 +460,11 @@ func extractFirstSticker(doc *goquery.Document, result *structure.CrawlResult) {
 			// 이미지 태그 찾기
 			img := elem.Find("img")
 			if img.Length() > 0 && img.AttrOr("src", "") != "" {
-				imgURL := img.AttrOr("src", "")
+				imgUrl := img.AttrOr("src", "")
 				// 스티커 도메인 확인
 				for _, domain := range constants.STICKER_DOMAINS {
-					if strings.Contains(imgURL, domain) {
-						stickerURLs = append(stickerURLs, imgURL)
+					if strings.Contains(imgUrl, domain) {
+						stickerUrls = append(stickerUrls, imgUrl)
 						break
 					}
 				}
@@ -476,11 +476,11 @@ func extractFirstSticker(doc *goquery.Document, result *structure.CrawlResult) {
 				urlRegex := regexp.MustCompile(`url\(['"]?(.*?)['"]?\)`)
 				matches := urlRegex.FindStringSubmatch(style)
 				if len(matches) > 1 {
-					imgURL := matches[1]
+					imgUrl := matches[1]
 					// 스티커 도메인 확인
 					for _, domain := range constants.STICKER_DOMAINS {
-						if strings.Contains(imgURL, domain) {
-							stickerURLs = append(stickerURLs, imgURL)
+						if strings.Contains(imgUrl, domain) {
+							stickerUrls = append(stickerUrls, imgUrl)
 							break
 						}
 					}
@@ -488,24 +488,24 @@ func extractFirstSticker(doc *goquery.Document, result *structure.CrawlResult) {
 			}
 		})
 
-		if len(stickerURLs) > 0 {
+		if len(stickerUrls) > 0 {
 			break
 		}
 	}
 
 	// 2. data-linkdata 속성으로 찾기 (네이버 블로그 특유의 구조)
-	if len(stickerURLs) == 0 {
+	if len(stickerUrls) == 0 {
 		doc.Find("[data-linkdata]").Each(func(i int, elem *goquery.Selection) {
 			linkData := elem.AttrOr("data-linkdata", "")
 			if linkData != "" {
 				var data map[string]interface{}
 				err := json.Unmarshal([]byte(linkData), &data)
 				if err == nil && data["src"] != nil {
-					imgURL := data["src"].(string)
+					imgUrl := data["src"].(string)
 					// 스티커 도메인 확인
 					for _, domain := range constants.STICKER_DOMAINS {
-						if strings.Contains(imgURL, domain) {
-							stickerURLs = append(stickerURLs, imgURL)
+						if strings.Contains(imgUrl, domain) {
+							stickerUrls = append(stickerUrls, imgUrl)
 							break
 						}
 					}
@@ -515,37 +515,37 @@ func extractFirstSticker(doc *goquery.Document, result *structure.CrawlResult) {
 	}
 
 	// 3. 이미지 태그 확인
-	if len(stickerURLs) == 0 {
+	if len(stickerUrls) == 0 {
 		doc.Find("img").Each(func(i int, img *goquery.Selection) {
-			imgURL := img.AttrOr("src", "")
+			imgUrl := img.AttrOr("src", "")
 			// 스티커 도메인 확인
 			for _, domain := range constants.STICKER_DOMAINS {
-				if strings.Contains(imgURL, domain) {
-					stickerURLs = append(stickerURLs, imgURL)
+				if strings.Contains(imgUrl, domain) {
+					stickerUrls = append(stickerUrls, imgUrl)
 					break
 				}
 			}
 		})
 	}
 	// 결과 설정
-	if len(stickerURLs) > 0 {
-		result.FirstStickerURL = stickerURLs[0]
-		if len(stickerURLs) > 1 {
-			// 두 번째 스티커 URL 저장
-			result.SecondStickerURL = stickerURLs[1]
+	if len(stickerUrls) > 0 {
+		result.FirstStickerUrl = stickerUrls[0]
+		if len(stickerUrls) > 1 {
+			// 두 번째 스티커 Url 저장
+			result.SecondStickerUrl = stickerUrls[1]
 			// 마지막 스티커는 수집하지 않음 (2025년 이후 포스트)
-			result.LastStickerURL = stickerURLs[len(stickerURLs)-1]
+			result.LastStickerUrl = stickerUrls[len(stickerUrls)-1]
 		} else {
-			result.SecondStickerURL = ""
-			result.LastStickerURL = ""
+			result.SecondStickerUrl = ""
+			result.LastStickerUrl = ""
 		}
 	}
 }
 
 // extractFirstImage는 본문 영역에서 첫 번째와 마지막 이미지를 추출합니다
 func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
-	// 모든 이미지 URL을 저장할 슬라이스
-	var imageURLs []string
+	// 모든 이미지 Url을 저장할 슬라이스
+	var imageUrls []string
 
 	// 본문 영역 찾기
 	var contentArea *goquery.Selection
@@ -563,7 +563,7 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 
 	// 0. 인라인 이미지 및 data-linkdata 속성 확인 (협찬 이미지에 특히 중요)
 	contentArea.Find(".se-inline-image, .se-module-image").Each(func(i int, imgContainer *goquery.Selection) {
-		// data-linkdata 속성 확인 (JSON 데이터로 이미지 URL 포함)
+		// data-linkdata 속성 확인 (JSON 데이터로 이미지 Url 포함)
 		linkElem := imgContainer.Find("a[data-linkdata], [data-linkdata]").First()
 		if linkElem.Length() > 0 {
 			linkData := linkElem.AttrOr("data-linkdata", "")
@@ -571,12 +571,12 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 				var data map[string]interface{}
 				err := json.Unmarshal([]byte(linkData), &data)
 				if err == nil && data["src"] != nil {
-					imgURL := data["src"].(string)
+					imgUrl := data["src"].(string)
 
 					// 제외 패턴 확인
 					isExcluded := false
 					for _, pattern := range constants.EXCLUDE_IMAGE_PATTERNS {
-						if strings.Contains(imgURL, pattern) {
+						if strings.Contains(imgUrl, pattern) {
 							isExcluded = true
 							break
 						}
@@ -584,7 +584,7 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 
 					// 제외되지 않은 이미지만 추가
 					if !isExcluded {
-						imageURLs = append(imageURLs, imgURL)
+						imageUrls = append(imageUrls, imgUrl)
 					}
 				}
 			}
@@ -593,12 +593,12 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 		// 직접 이미지 태그 확인
 		img := imgContainer.Find("img").First()
 		if img.Length() > 0 {
-			imgURL := img.AttrOr("src", "")
-			if imgURL != "" {
+			imgUrl := img.AttrOr("src", "")
+			if imgUrl != "" {
 				// 제외 패턴 확인
 				isExcluded := false
 				for _, pattern := range constants.EXCLUDE_IMAGE_PATTERNS {
-					if strings.Contains(imgURL, pattern) {
+					if strings.Contains(imgUrl, pattern) {
 						isExcluded = true
 						break
 					}
@@ -606,7 +606,7 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 
 				// 제외되지 않은 이미지만 추가
 				if !isExcluded {
-					imageURLs = append(imageURLs, imgURL)
+					imageUrls = append(imageUrls, imgUrl)
 				}
 			}
 		}
@@ -621,12 +621,12 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 			return // 스티커 모듈 내부의 이미지는 건너뜀
 		}
 
-		imgURL := img.AttrOr("src", "")
-		if imgURL != "" {
+		imgUrl := img.AttrOr("src", "")
+		if imgUrl != "" {
 			// 제외 패턴 확인
 			isExcluded := false
 			for _, pattern := range constants.EXCLUDE_IMAGE_PATTERNS {
-				if strings.Contains(imgURL, pattern) {
+				if strings.Contains(imgUrl, pattern) {
 					isExcluded = true
 					break
 				}
@@ -634,7 +634,7 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 
 			// 제외되지 않은 이미지만 추가
 			if !isExcluded {
-				imageURLs = append(imageURLs, imgURL)
+				imageUrls = append(imageUrls, imgUrl)
 			}
 		}
 	})
@@ -644,12 +644,12 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 		// 이미지 모듈 찾기
 		img := component.Find(".se-module-image .se-image-resource").First()
 		if img.Length() > 0 {
-			imgURL := img.AttrOr("src", "")
-			if imgURL != "" {
+			imgUrl := img.AttrOr("src", "")
+			if imgUrl != "" {
 				// 제외 패턴 확인
 				isExcluded := false
 				for _, pattern := range constants.EXCLUDE_IMAGE_PATTERNS {
-					if strings.Contains(imgURL, pattern) {
+					if strings.Contains(imgUrl, pattern) {
 						isExcluded = true
 						break
 					}
@@ -657,7 +657,7 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 
 				// 제외되지 않은 이미지만 추가
 				if !isExcluded {
-					imageURLs = append(imageURLs, imgURL)
+					imageUrls = append(imageUrls, imgUrl)
 					return
 				}
 			}
@@ -671,12 +671,12 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 				var data map[string]interface{}
 				err := json.Unmarshal([]byte(linkData), &data)
 				if err == nil && data["src"] != nil {
-					imgURL := data["src"].(string)
+					imgUrl := data["src"].(string)
 
 					// 제외 패턴 확인
 					isExcluded := false
 					for _, pattern := range constants.EXCLUDE_IMAGE_PATTERNS {
-						if strings.Contains(imgURL, pattern) {
+						if strings.Contains(imgUrl, pattern) {
 							isExcluded = true
 							break
 						}
@@ -684,7 +684,7 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 
 					// 제외되지 않은 이미지만 추가
 					if !isExcluded {
-						imageURLs = append(imageURLs, imgURL)
+						imageUrls = append(imageUrls, imgUrl)
 					}
 				}
 			}
@@ -698,19 +698,19 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 			return // 스티커 관련 요소 내부의 이미지는 건너뜀
 		}
 
-		imgURL := img.AttrOr("src", "")
-		if imgURL == "" {
-			imgURL = img.AttrOr("data-src", "")
+		imgUrl := img.AttrOr("src", "")
+		if imgUrl == "" {
+			imgUrl = img.AttrOr("data-src", "")
 		}
-		if imgURL == "" {
-			imgURL = img.AttrOr("data-lazy-src", "")
+		if imgUrl == "" {
+			imgUrl = img.AttrOr("data-lazy-src", "")
 		}
 
-		if imgURL != "" && (strings.HasPrefix(imgURL, "http://") || strings.HasPrefix(imgURL, "https://")) {
+		if imgUrl != "" && (strings.HasPrefix(imgUrl, "http://") || strings.HasPrefix(imgUrl, "https://")) {
 			// 제외 패턴 확인
 			isExcluded := false
 			for _, pattern := range constants.EXCLUDE_IMAGE_PATTERNS {
-				if strings.Contains(imgURL, pattern) {
+				if strings.Contains(imgUrl, pattern) {
 					isExcluded = true
 					break
 				}
@@ -718,25 +718,25 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 
 			// 제외되지 않은 이미지만 추가
 			if !isExcluded {
-				imageURLs = append(imageURLs, imgURL)
+				imageUrls = append(imageUrls, imgUrl)
 			}
 		}
 	})
 
 	// 결과 설정
-	if len(imageURLs) > 0 {
-		result.FirstImageURL = imageURLs[0]
-		if strings.HasSuffix(result.FirstImageURL, "w80_blur") {
-			result.FirstImageURL = strings.Replace(result.FirstImageURL, "w80_blur", "w773", 1)
+	if len(imageUrls) > 0 {
+		result.FirstImageUrl = imageUrls[0]
+		if strings.HasSuffix(result.FirstImageUrl, "w80_blur") {
+			result.FirstImageUrl = strings.Replace(result.FirstImageUrl, "w80_blur", "w773", 1)
 		}
 
-		if len(imageURLs) > 1 {
-			result.LastImageURL = imageURLs[len(imageURLs)-1]
-			if strings.HasSuffix(result.LastImageURL, "w80_blur") {
-				result.LastImageURL = strings.Replace(result.LastImageURL, "w80_blur", "w773", 1)
+		if len(imageUrls) > 1 {
+			result.LastImageUrl = imageUrls[len(imageUrls)-1]
+			if strings.HasSuffix(result.LastImageUrl, "w80_blur") {
+				result.LastImageUrl = strings.Replace(result.LastImageUrl, "w80_blur", "w773", 1)
 			}
 		} else {
-			result.LastImageURL = result.FirstImageURL
+			result.LastImageUrl = result.FirstImageUrl
 		}
 	}
 }
