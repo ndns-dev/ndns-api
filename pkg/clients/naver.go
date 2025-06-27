@@ -32,7 +32,7 @@ func NewNaverAPIClient(config *configs.EnvConfig) *NaverAPIClient {
 
 // SearchBlog는 네이버 블로그 검색 API를 호출하여 결과를 반환합니다.
 func (c *NaverAPIClient) SearchBlog(query string, display int, start int) (*structure.NaverSearchResponse, error) {
-	searchURL := c.Config.Naver.SearchURL
+	searchUrl := c.Config.Naver.SearchUrl
 
 	params := url.Values{}
 	params.Add("query", query)
@@ -40,17 +40,17 @@ func (c *NaverAPIClient) SearchBlog(query string, display int, start int) (*stru
 	params.Add("start", fmt.Sprintf("%d", start))
 	params.Add("sort", "sim") // 정확도순 정렬
 
-	// 요청 URL 생성
-	reqURL := searchURL + "?" + params.Encode()
+	// 요청 Url 생성
+	reqUrl := searchUrl + "?" + params.Encode()
 
 	// HTTP 요청 생성
-	req, err := http.NewRequest("GET", reqURL, nil)
+	req, err := http.NewRequest("GET", reqUrl, nil)
 	if err != nil {
 		return nil, fmt.Errorf("요청 생성 실패: %v", err)
 	}
 
 	// API 인증 헤더 추가
-	req.Header.Add("X-Naver-Client-Id", c.Config.Naver.ClientID)
+	req.Header.Add("X-Naver-Client-Id", c.Config.Naver.ClientId)
 	req.Header.Add("X-Naver-Client-Secret", c.Config.Naver.ClientSecret)
 
 	// 요청 실행

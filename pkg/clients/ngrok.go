@@ -16,17 +16,17 @@ import (
 // NgrokAPIClient는 ngrok API 요청을 처리하는 클라이언트입니다.
 type NgrokAPIClient struct {
 	_interface.Service
-	BaseURL string
+	BaseUrl string
 }
 
 // NewNgrokAPIClient는 새로운 ngrok API 클라이언트를 생성합니다.
 func NewNgrokAPIClient(config *configs.EnvConfig) *NgrokAPIClient {
 
-	ngrokAPIURL := "http://localhost:4040"
+	ngrokAPIUrl := "http://localhost:4040"
 	// Docker 환경인지 확인
 	if _, err := os.Stat("/.dockerenv"); err == nil {
 		// Docker 컨테이너 내부
-		ngrokAPIURL = "http://host.docker.internal:4040"
+		ngrokAPIUrl = "http://host.docker.internal:4040"
 	}
 
 	return &NgrokAPIClient{
@@ -36,16 +36,16 @@ func NewNgrokAPIClient(config *configs.EnvConfig) *NgrokAPIClient {
 			},
 			Config: config,
 		},
-		BaseURL: ngrokAPIURL,
+		BaseUrl: ngrokAPIUrl,
 	}
 }
 
 // GetTunnels는 현재 활성화된 ngrok 터널 정보를 가져옵니다.
 func (c *NgrokAPIClient) GetTunnels() (*structure.NgrokTunnelsResponse, error) {
-	reqURL := c.BaseURL + "/api/tunnels"
+	reqUrl := c.BaseUrl + "/api/tunnels"
 
 	// HTTP 요청 생성
-	req, err := http.NewRequest("GET", reqURL, nil)
+	req, err := http.NewRequest("GET", reqUrl, nil)
 	if err != nil {
 		return nil, fmt.Errorf("요청 생성 실패: %v", err)
 	}
