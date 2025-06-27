@@ -1,20 +1,30 @@
 package _interface
 
-import structure "github.com/sh5080/ndns-go/pkg/types/structures"
+import (
+	model "github.com/sh5080/ndns-go/pkg/types/models"
+	structure "github.com/sh5080/ndns-go/pkg/types/structures"
+)
 
-// OCRService는 이미지에서 텍스트를 추출하는 인터페이스입니다
-type OCRService interface {
-	// ExtractTextFromImage는 이미지 URL에서 텍스트를 추출합니다
-	ExtractTextFromImage(imageURL string) (string, error)
+// OcrProcessResponse는 Ocr 처리 응답 구조체입니다
+type OcrProcessResponse struct {
+	JobId       string                       `json:"jobId"`
+	IsSponsored bool                         `json:"isSponsored"`
+	Probability float64                      `json:"probability"`
+	Indicators  []structure.SponsorIndicator `json:"indicators"`
 }
 
-type OCRRepository interface {
-	// GetOCRCache는 이미지 URL에 대한 OCR 캐시를 가져옵니다
-	GetOCRCache(imageURL string) (*structure.OCRCache, error)
-
-	// SaveOCRCache는 이미지 URL에 대한 OCR 결과를 저장합니다
-	SaveOCRCache(imageURL string, textDetected string, imageType string) error
+// OcrService는 Ocr 처리를 관리하는 인터페이스입니다
+type OcrService interface {
+	// ProcessOcrAndRequestNext는 Ocr 결과를 처리하고 필요한 경우 다음 Ocr을 요청합니다
+	ProcessOcrAndRequestNext(ocrResult model.OcrResult) (*OcrProcessResponse, error)
+	// RequestNextOcr은 다음 Ocr 처리를 요청합니다
+	RequestNextOcr(state model.OcrQueueState) error
 }
 
-type OCRFunc func(imageURL string) (string, error)
-type OCRCacheFunc func(imageURL string) (string, bool)
+// OcrRepository는 Ocr 작업과 결과를 관리하는 인터페이스입니다
+type OcrRepository interface {
+	SaveOcrJob(jobDetail *model.OcrQueueState) error
+	GetOcrJob(jobId string) (*model.OcrQueueState, error)
+	SaveOcrResult(result *model.OcrResult) error
+	GetOcrResult(imageUrl string) (*model.OcrResult, error)
+}
