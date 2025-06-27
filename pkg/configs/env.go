@@ -16,29 +16,31 @@ var AppVersion string
 type EnvConfig struct {
 	Server struct {
 		Port      string `env:"PORT,required"`
-		WorkerURL string `env:"WORKER_URL,required"`
+		WorkerUrl string `env:"WORKER_URL,required"`
 		AppName   string `env:"APP_NAME,required"`
-		AppURL    string `env:"APP_URL,required"`
+		AppUrl    string `env:"APP_URL,required"`
 	}
 	AWS struct {
-		AccessKeyID      string `env:"AWS_ACCESS_KEY_ID,required"`
+		AccessKeyId      string `env:"AWS_ACCESS_KEY_ID,required"`
 		SecretAccessKey  string `env:"AWS_SECRET_ACCESS_KEY,required"`
 		Region           string `env:"AWS_REGION,required"`
 		DynamoDBEndpoint string `env:"AWS_DYNAMODB_ENDPOINT" envDefault:""`
 		Tables           struct {
-			OCRCache     string `env:"AWS_DYNAMODB_TABLE_OCR_CACHE"`
-			ServerStatus string `env:"AWS_DYNAMODB_TABLE_SERVER_STATUS"`
-			Server       string `env:"AWS_DYNAMODB_TABLE_SERVER"`
+			OcrResult     string `env:"AWS_TABLES_OCR_RESULT" envDefault:"ocrResult"`
+			OcrQueueState string `env:"AWS_TABLES_OCR_QUEUE_STATE" envDefault:"ocrQueueState"`
+		}
+		SQS struct {
+			QueueUrl string `env:"AWS_SQS_QUEUE_URL,required"`
 		}
 	}
 	Naver struct {
-		ClientID     string `env:"NAVER_CLIENT_ID,required"`
+		ClientId     string `env:"NAVER_CLIENT_ID,required"`
 		ClientSecret string `env:"NAVER_CLIENT_SECRET,required"`
-		SearchURL    string `env:"NAVER_SEARCH_URL" envDefault:"https://openapi.naver.com/v1/search/blog.json"`
+		SearchUrl    string `env:"NAVER_SEARCH_URL" envDefault:"https://openapi.naver.com/v1/search/blog.json"`
 	}
-	OCR struct {
-		TesseractPath string `env:"OCR_TESSERACT_PATH" envDefault:"/usr/local/bin/tesseract"`
-		TempDir       string `env:"OCR_TEMP_DIR" envDefault:"/tmp"`
+	Ocr struct {
+		TesseractPath string `env:"Ocr_TESSERACT_PATH" envDefault:"/usr/local/bin/tesseract"`
+		TempDir       string `env:"Ocr_TEMP_DIR" envDefault:"/tmp"`
 	}
 }
 
