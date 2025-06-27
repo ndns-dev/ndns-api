@@ -6,9 +6,9 @@ import (
 	structure "github.com/sh5080/ndns-go/pkg/types/structures"
 )
 
-// CreateBlogPost는 기본 블로그 포스트 구조체를 생성합니다
-func CreateBlogPost(item structure.NaverSearchItem) structure.BlogPost {
-	return structure.BlogPost{
+// CreateAnalyzedResponse는 기본 블로그 포스트 구조체를 생성합니다
+func CreateAnalyzedResponse(item structure.NaverSearchItem) structure.AnalyzedResponse {
+	return structure.AnalyzedResponse{
 		NaverSearchItem:    item,
 		IsSponsored:        false,
 		SponsorProbability: 0,
@@ -16,8 +16,8 @@ func CreateBlogPost(item structure.NaverSearchItem) structure.BlogPost {
 	}
 }
 
-// CreateSponsoredBlogPost는 스폰서된 블로그 포스트 구조체를 생성합니다
-func CreateSponsoredBlogPost(
+// CreateSponsoredAnalyzedResponse는 스폰서된 블로그 포스트 구조체를 생성합니다
+func CreateSponsoredAnalyzedResponse(
 	item structure.NaverSearchItem,
 	probability float64,
 	matchedText string,
@@ -25,7 +25,7 @@ func CreateSponsoredBlogPost(
 	patternType structure.PatternType,
 	sponsorType structure.SponsorType,
 	sourceText string,
-) structure.BlogPost {
+) structure.AnalyzedResponse {
 	// 협찬 표시자 생성
 	indicator := structure.SponsorIndicator{
 		Type:        indicatorType,
@@ -39,7 +39,7 @@ func CreateSponsoredBlogPost(
 	}
 
 	// 블로그 포스트 생성
-	return structure.BlogPost{
+	return structure.AnalyzedResponse{
 		NaverSearchItem:    item,
 		IsSponsored:        true,
 		SponsorProbability: probability,
@@ -50,7 +50,7 @@ func CreateSponsoredBlogPost(
 
 // AddIndicator는 블로그 포스트에 협찬 표시자를 추가합니다
 func AddIndicator(
-	post *structure.BlogPost,
+	post *structure.AnalyzedResponse,
 	indicatorType structure.IndicatorType,
 	patternType structure.PatternType,
 	matchedText string,
@@ -105,9 +105,9 @@ func CreateSponsorIndicator(
 	}
 }
 
-// UpdateBlogPostWithSponsorInfo는 협찬 감지 결과를 블로그 포스트에 업데이트합니다
-func UpdateBlogPostWithSponsorInfo(
-	blogPost *structure.BlogPost,
+// UpdateAnalyzedResponseWithSponsorInfo는 협찬 감지 결과를 블로그 포스트에 업데이트합니다
+func UpdateAnalyzedResponseWithSponsorInfo(
+	blogPost *structure.AnalyzedResponse,
 	isSponsored bool,
 	probability float64,
 	indicators []structure.SponsorIndicator,
@@ -127,7 +127,7 @@ func UpdateBlogPostWithSponsorInfo(
 	blogPost.Error = "" // 협찬이 확인된 경우 에러 필드 초기화
 }
 
-// 이미지 URL에서 협찬 도메인을 확인하는 함수
+// 이미지 Url에서 협찬 도메인을 확인하는 함수
 func CheckSponsorDomain(url string, domains []string) (bool, string) {
 	if url == "" {
 		return false, ""

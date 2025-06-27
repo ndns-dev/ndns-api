@@ -6,7 +6,9 @@ import (
 	naver "github.com/sh5080/ndns-go/pkg/clients"
 	"github.com/sh5080/ndns-go/pkg/configs"
 	_interface "github.com/sh5080/ndns-go/pkg/interfaces"
+	"github.com/sh5080/ndns-go/pkg/services/internal/analyzer"
 	"github.com/sh5080/ndns-go/pkg/services/internal/detector"
+	"github.com/sh5080/ndns-go/pkg/services/internal/queue"
 	request "github.com/sh5080/ndns-go/pkg/types/dtos/requests"
 	structure "github.com/sh5080/ndns-go/pkg/types/structures"
 )
@@ -22,7 +24,9 @@ type SearchImpl struct {
 func NewSearchService() _interface.SearchService {
 	config := configs.GetConfig()
 	naverClient := naver.NewNaverAPIClient(config)
-	ocrService := detector.NewOCRService()
+	queueService := queue.NewSqsService()
+	analyzerService := analyzer.NewAnalyzerService()
+	ocrService := detector.NewOcrService(queueService, analyzerService)
 	postService := detector.NewPostService(ocrService)
 
 	return &SearchImpl{
@@ -32,8 +36,8 @@ func NewSearchService() _interface.SearchService {
 	}
 }
 
-// SearchBlogPosts는 검색어로 블로그 포스트를 검색합니다
-func (s *SearchImpl) SearchBlogPosts(req request.SearchQuery) ([]structure.BlogPost, int, error) {
+// SearchAnalyzedResponses는 검색어로 블로그 포스트를 검색합니다
+func (s *SearchImpl) SearchAnalyzedResponses(req request.SearchQuery) ([]structure.AnalyzedResponse, int, error) {
 	if s.naverClient == nil {
 		return nil, 0, fmt.Errorf("네이버 API 클라이언트가 초기화되지 않았습니다")
 	}
@@ -45,12 +49,12 @@ func (s *SearchImpl) SearchBlogPosts(req request.SearchQuery) ([]structure.BlogP
 	}
 
 	// 스폰서 감지 (실패해도 계속 진행)
-	var posts []structure.BlogPost
+	var posts []structure.AnalyzedResponse
 	posts, err = s.postService.DetectPosts(searchResp.Items)
 	if err != nil {
 		fmt.Printf("스폰서 감지 중 무시된 오류: %v\n", err)
 		// 오류 발생 시 빈 슬라이스 반환
-		posts = []structure.BlogPost{}
+		posts = []structure.AnalyzedResponse{}
 	}
 
 	// 네이버 API에서 반환한 총 결과 수 반환
