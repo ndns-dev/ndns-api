@@ -24,22 +24,14 @@ type NaverSearchResponse struct {
 	Items         []NaverSearchItem `json:"items"`
 }
 
-type BlogPost struct {
-	NaverSearchItem
-	IsSponsored        bool               `json:"isSponsored"`
-	SponsorProbability float64            `json:"sponsorProbability"`
-	SponsorIndicators  []SponsorIndicator `json:"sponsorIndicators"`
-	Error              string             `json:"error,omitempty"`
-}
-
 type CrawlResult struct {
-	URL              string
-	FirstParagraph   string
-	LastParagraph    string
-	Content          string
-	FirstImageURL    string
-	LastImageURL     string
-	FirstStickerURL  string
-	SecondStickerURL string
-	LastStickerURL   string
+	Url              string `json:"url"`
+	FirstParagraph   string `json:"firstParagraph"`
+	LastParagraph    string `json:"lastParagraph"`
+	Content          string `json:"content"`
+	FirstImageUrl    string `json:"firstImageUrl"`
+	LastImageUrl     string `json:"lastImageUrl"`
+	FirstStickerUrl  string `json:"firstStickerUrl"`
+	SecondStickerUrl string `json:"secondStickerUrl"`
+	LastStickerUrl   string `json:"lastStickerUrl"`
 }

@@ -6,12 +6,56 @@ import (
 	structure "github.com/sh5080/ndns-go/pkg/types/structures"
 )
 
-// OCRCache는 DynamoDB에 저장될 OCR 캐시 아이템을 나타냅니다.
-type OCRCache struct {
-	ImageURL     string              `json:"imageUrl"`     // 프라이머리 키
-	TextDetected string              `json:"textDetected"` // OCR 결과 텍스트
-	ImageType    structure.BlogImage `json:"imageType"`    // 이미지 타입
-	Result       string              `json:"result"`       // OCR 결과
-	CreatedAt    time.Time           `json:"createdAt"`    // 생성 시간
-	ExpiresAt    time.Time           `json:"expiresAt"`    // 만료 시간
+// OcrPosition은 Ocr을 수행할 이미지의 위치를 나타냅니다
+type OcrPosition string
+
+const (
+	OcrPositionFirstImage    OcrPosition = "FirstImageUrl"
+	OcrPositionFirstSticker  OcrPosition = "FirstStickerUrl"
+	OcrPositionSecondSticker OcrPosition = "SecondStickerUrl"
+	OcrPositionLastImage     OcrPosition = "LastImageUrl"
+	OcrPositionLastSticker   OcrPosition = "LastStickerUrl"
+)
+
+// OcrResult는 DynamoDB에 저장될 Ocr 결과 아이템을 나타냅니다.
+type OcrResult struct {
+	ImageUrl    string      `json:"imageUrl" dynamodbav:"imageUrl"`       // 프라이머리 키
+	JobId       string      `json:"jobId" dynamodbav:"jobId"`             // State 키
+	Position    OcrPosition `json:"position" dynamodbav:"position"`       // Ocr 위치
+	OcrText     string      `json:"ocrText" dynamodbav:"ocrText"`         // Ocr 결과 텍스트
+	ProcessedAt time.Time   `json:"processedAt" dynamodbav:"processedAt"` // 처리 시간
+	Error       string      `json:"error" dynamodbav:"error"`             // 오류 메시지
+}
+
+// OcrQueueState는 Ocr 처리 상태를 관리합니다
+type OcrQueueState struct {
+	JobId           string                 `json:"jobId" dynamodbav:"jobId"`                     // 프라이머리 키
+	CrawlResult     *structure.CrawlResult `json:"crawlResult" dynamodbav:"crawlResult"`         // 크롤링 결과
+	CurrentPosition OcrPosition            `json:"currentPosition" dynamodbav:"currentPosition"` // 현재 Ocr 위치
+	Is2025OrLater   bool                   `json:"is2025OrLater" dynamodbav:"is2025OrLater"`     // 2025년 이후 여부
+	RequestedAt     time.Time              `json:"requestedAt" dynamodbav:"requestedAt"`         // 요청 시간
+}
+
+// GetNextOcrPosition은 현재 위치에 따른 다음 OCR 위치를 반환합니다
+func GetNextOcrPosition(current OcrPosition, is2025OrLater bool) OcrPosition {
+	switch current {
+	case OcrPositionFirstImage:
+		return OcrPositionFirstSticker
+	case OcrPositionFirstSticker:
+		return OcrPositionSecondSticker
+	case OcrPositionSecondSticker:
+		if !is2025OrLater {
+			return OcrPositionLastImage
+		}
+		return ""
+	case OcrPositionLastImage:
+		if !is2025OrLater {
+			return OcrPositionLastSticker
+		}
+		return ""
+	case OcrPositionLastSticker:
+		return ""
+	default:
+		return ""
+	}
 }

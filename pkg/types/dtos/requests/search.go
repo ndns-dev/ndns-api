@@ -6,3 +6,8 @@ type SearchQuery struct {
 	Limit  int    `json:"limit,omitempty" validate:"min=1,max=100"`
 	Offset int    `json:"offset,omitempty" validate:"min=0"`
 }
+
+// AnalyzeTextParam는 텍스트 분석 요청 구조체입니다
+type AnalyzeTextParam struct {
+	Text string `json:"text"`
+}
