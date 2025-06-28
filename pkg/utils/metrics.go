@@ -119,7 +119,7 @@ func RecordError(service, errorType string) {
 
 // GetInstanceName returns the instance name and job name
 func GetInstanceName() (string, string) {
-	instance := configs.GetConfig().Server.AppURL
+	instance := configs.GetConfig().Server.AppUrl
 	job := configs.GetConfig().Server.AppName
 	return instance, job
 }
