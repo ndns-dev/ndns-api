@@ -10,6 +10,7 @@ import (
 type OcrPosition string
 
 const (
+	OcrPositionStart         OcrPosition = "Start"
 	OcrPositionFirstImage    OcrPosition = "FirstImageUrl"
 	OcrPositionFirstSticker  OcrPosition = "FirstStickerUrl"
 	OcrPositionSecondSticker OcrPosition = "SecondStickerUrl"
@@ -34,28 +35,4 @@ type OcrQueueState struct {
 	CurrentPosition OcrPosition            `json:"currentPosition" dynamodbav:"currentPosition"` // 현재 Ocr 위치
 	Is2025OrLater   bool                   `json:"is2025OrLater" dynamodbav:"is2025OrLater"`     // 2025년 이후 여부
 	RequestedAt     time.Time              `json:"requestedAt" dynamodbav:"requestedAt"`         // 요청 시간
-}
-
-// GetNextOcrPosition은 현재 위치에 따른 다음 OCR 위치를 반환합니다
-func GetNextOcrPosition(current OcrPosition, is2025OrLater bool) OcrPosition {
-	switch current {
-	case OcrPositionFirstImage:
-		return OcrPositionFirstSticker
-	case OcrPositionFirstSticker:
-		return OcrPositionSecondSticker
-	case OcrPositionSecondSticker:
-		if !is2025OrLater {
-			return OcrPositionLastImage
-		}
-		return ""
-	case OcrPositionLastImage:
-		if !is2025OrLater {
-			return OcrPositionLastSticker
-		}
-		return ""
-	case OcrPositionLastSticker:
-		return ""
-	default:
-		return ""
-	}
 }

@@ -108,7 +108,7 @@ func (s *PostImpl) DetectPosts(posts []structure.NaverSearchItem) ([]structure.A
 						state := model.OcrQueueState{
 							JobId:           jobId,
 							CrawlResult:     crawlResult,
-							CurrentPosition: model.OcrPositionFirstImage,
+							CurrentPosition: model.OcrPositionStart,
 							Is2025OrLater:   is2025OrLater,
 						}
 
