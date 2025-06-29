@@ -91,7 +91,7 @@ func AnalyzeCycle(analyzerService _interface.AnalyzerService, ocrService _interf
 		}
 
 		// OCR 결과 처리 및 다음 OCR 요청
-		response, err := ocrService.ProcessOcrAndRequestNext(req.State, req.Result)
+		response, err := analyzerService.AnalyzeCycle(req.State, req.Result)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": "OCR 처리 실패: " + err.Error(),
