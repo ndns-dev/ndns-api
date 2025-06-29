@@ -6,9 +6,6 @@ import (
 	naver "github.com/sh5080/ndns-go/pkg/clients"
 	"github.com/sh5080/ndns-go/pkg/configs"
 	_interface "github.com/sh5080/ndns-go/pkg/interfaces"
-	"github.com/sh5080/ndns-go/pkg/services/internal/analyzer"
-	"github.com/sh5080/ndns-go/pkg/services/internal/detector"
-	"github.com/sh5080/ndns-go/pkg/services/internal/queue"
 	request "github.com/sh5080/ndns-go/pkg/types/dtos/requests"
 	structure "github.com/sh5080/ndns-go/pkg/types/structures"
 )
@@ -21,13 +18,9 @@ type SearchImpl struct {
 }
 
 // NewSearchService는 새 검색 서비스를 생성합니다
-func NewSearchService() _interface.SearchService {
+func NewSearchService(postService _interface.PostService) _interface.SearchService {
 	config := configs.GetConfig()
 	naverClient := naver.NewNaverAPIClient(config)
-	queueService := queue.NewSqsService()
-	analyzerService := analyzer.NewAnalyzerService()
-	ocrService := detector.NewOcrService(queueService, analyzerService)
-	postService := detector.NewPostService(ocrService)
 
 	return &SearchImpl{
 		Service:     _interface.Service{Config: config},
