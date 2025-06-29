@@ -15,13 +15,15 @@ import (
 
 // AnalyzerService는 텍스트 분석을 위한 서비스입니다
 type AnalyzerService struct {
-	config *configs.EnvConfig
+	config     *configs.EnvConfig
+	ocrService _interface.OcrService
 }
 
 // NewAnalyzerService는 새로운 AnalyzerService를 생성합니다
-func NewAnalyzerService() _interface.AnalyzerService {
+func NewAnalyzerService(ocrService _interface.OcrService) _interface.AnalyzerService {
 	return &AnalyzerService{
-		config: configs.GetConfig(),
+		config:     configs.GetConfig(),
+		ocrService: ocrService,
 	}
 }
 
@@ -65,52 +67,15 @@ func (s *AnalyzerService) AnalyzeCycle(state model.OcrQueueState, result model.O
 		return nil, fmt.Errorf("OCR 텍스트 분석 실패: %v", err)
 	}
 
-	// 협찬이 발견되지 않은 경우 다음 분석 상태 표시
-	if !analyzed.IsSponsored {
-		nextPosition := GetNextOcrPosition(state.CurrentPosition, state.Is2025OrLater)
-		if nextPosition != "" {
-			pendingIndicator := CreatePendingIndicator(state.JobId)
-			analyzed.SponsorIndicators = append(analyzed.SponsorIndicators, pendingIndicator)
-		}
+	// LastSticker이거나 협찬이 발견된 경우 추가 분석 없이 결과 반환
+	if state.CurrentPosition == model.OcrPositionLastSticker || analyzed.IsSponsored {
+		return analyzed, nil
+	}
+
+	// 다음 분석 위치가 있는 경우 SQS에 요청
+	if err := s.ocrService.RequestNextOcr(state); err != nil {
+		return nil, fmt.Errorf("다음 OCR 요청 실패: %v", err)
 	}
 
 	return analyzed, nil
-}
-
-// GetNextOcrPosition은 현재 위치에 따른 다음 OCR 위치를 반환합니다
-func GetNextOcrPosition(current model.OcrPosition, is2025OrLater bool) model.OcrPosition {
-	switch current {
-	case model.OcrPositionFirstImage:
-		return model.OcrPositionFirstSticker
-	case model.OcrPositionFirstSticker:
-		return model.OcrPositionSecondSticker
-	case model.OcrPositionSecondSticker:
-		if !is2025OrLater {
-			return model.OcrPositionLastImage
-		}
-		return ""
-	case model.OcrPositionLastImage:
-		if !is2025OrLater {
-			return model.OcrPositionLastSticker
-		}
-		return ""
-	case model.OcrPositionLastSticker:
-		return ""
-	default:
-		return ""
-	}
-}
-
-// CreatePendingIndicator는 OCR 분석 중임을 나타내는 지표를 생성합니다
-func CreatePendingIndicator(jobId string) structure.SponsorIndicator {
-	return structure.SponsorIndicator{
-		Type:        structure.IndicatorTypePending,
-		Pattern:     structure.PatternTypeNormal,
-		MatchedText: "분석 중입니다. 잠시만 기다려주세요.",
-		Probability: 0,
-		Source: structure.SponsorSource{
-			SponsorType: structure.SponsorTypeImage,
-			Text:        jobId,
-		},
-	}
 }
