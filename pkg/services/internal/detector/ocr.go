@@ -27,13 +27,7 @@ type OcrService struct {
 }
 
 // ProcessOcrAndRequestNext는 Ocr 결과를 처리하고 필요한 경우 다음 Ocr을 요청합니다
-func (s *OcrService) ProcessOcrAndRequestNext(ocrResult model.OcrResult) (*_interface.OcrProcessResponse, error) {
-	// 현재 작업 상태 조회
-	state := model.OcrQueueState{
-		JobId:         ocrResult.JobId,
-		Is2025OrLater: time.Now().Year() >= 2025,
-	}
-
+func (s *OcrService) ProcessOcrAndRequestNext(state model.OcrQueueState, ocrResult model.OcrResult) (*_interface.OcrProcessResponse, error) {
 	// OCR 텍스트 분석
 	result, err := s.analyzerService.AnalyzeCycle(state, ocrResult)
 	if err != nil {

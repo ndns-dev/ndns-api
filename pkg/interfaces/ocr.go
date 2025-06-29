@@ -16,7 +16,7 @@ type OcrProcessResponse struct {
 // OcrService는 Ocr 처리를 관리하는 인터페이스입니다
 type OcrService interface {
 	// ProcessOcrAndRequestNext는 Ocr 결과를 처리하고 필요한 경우 다음 Ocr을 요청합니다
-	ProcessOcrAndRequestNext(ocrResult model.OcrResult) (*OcrProcessResponse, error)
+	ProcessOcrAndRequestNext(state model.OcrQueueState, ocrResult model.OcrResult) (*OcrProcessResponse, error)
 	// RequestNextOcr은 다음 Ocr 처리를 요청합니다
 	RequestNextOcr(state model.OcrQueueState) error
 }
