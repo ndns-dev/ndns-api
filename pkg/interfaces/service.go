@@ -1,10 +1,26 @@
 package _interface
 
 import (
+	"net/http"
+
+	"github.com/sh5080/ndns-go/pkg/configs"
 	request "github.com/sh5080/ndns-go/pkg/types/dtos/requests"
 	model "github.com/sh5080/ndns-go/pkg/types/models"
 	structure "github.com/sh5080/ndns-go/pkg/types/structures"
 )
+
+type Service struct {
+	Config *configs.EnvConfig
+	Client *http.Client
+}
+
+// ServiceContainer는 모든 서비스 인스턴스를 보관합니다
+type ServiceContainer struct {
+	DetectorService DetectorService
+	SearchService   SearchService
+	AnalyzerService AnalyzerService
+	OcrRepository   OcrRepository
+}
 
 // SearchService는 검색 서비스 인터페이스입니다
 type SearchService interface {
@@ -25,4 +41,16 @@ type AnalyzerService interface {
 type CrawlerService interface {
 	// CrawlAnalyzedResponse는 블로그 포스트 Url에서 콘텐츠를 크롤링합니다
 	CrawlAnalyzedResponse(url string) (*structure.CrawlResult, error)
+}
+
+// DetectorService는 탐지 처리를 관리하는 인터페이스입니다
+type DetectorService interface {
+	// RequestNextOcr은 다음 탐지 처리를 요청합니다
+	RequestNextOcr(state model.OcrQueueState) error
+}
+
+// QueueService는 큐 작업을 처리하는 인터페이스입니다
+type QueueService interface {
+	// SendQueue는 큐 작업을 SQS에 전송합니다
+	SendQueue(queueState model.OcrQueueState) error
 }
