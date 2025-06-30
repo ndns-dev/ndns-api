@@ -12,21 +12,19 @@ import (
 // NewServiceContainer는 새로운 서비스 컨테이너를 생성합니다
 func NewServiceContainer() *_interface.ServiceContainer {
 	// 1. 기본 서비스 초기화
-	queueService := queue.NewSqsService()
+	queueService := queue.NewQueueService()
 	ocrRepository := repository.NewOcrRepository()
 
 	// 2. 핵심 서비스 초기화
-	ocrService := detector.NewOcrService(queueService)
-	analyzerService := analyzer.NewAnalyzerService(ocrService)
+	detectorService := detector.NewDetectorService(queueService)
+	analyzerService := analyzer.NewAnalyzerService(detectorService)
 
 	// 3. 의존 서비스 초기화
-	postService := detector.NewPostService(ocrService)
-	searchService := api.NewSearchService(postService)
+	searchService := api.NewSearchService(analyzerService)
 
 	return &_interface.ServiceContainer{
 		SearchService:   searchService,
-		OcrService:      ocrService,
-		PostService:     postService,
+		DetectorService: detectorService,
 		AnalyzerService: analyzerService,
 		OcrRepository:   ocrRepository,
 	}

@@ -12,7 +12,7 @@ import (
 )
 
 // Search는 검색 요청을 처리하는 핸들러입니다
-func Search(searchService _interface.SearchService, postService _interface.PostService) fiber.Handler {
+func Search(searchService _interface.SearchService) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		queries := c.Queries()
 		var req requestDto.SearchQuery
@@ -77,7 +77,7 @@ func AnalyzeText(analyzerService _interface.AnalyzerService) fiber.Handler {
 }
 
 // AnalyzeCycle은 OCR 결과를 분석하고 다음 OCR 요청 여부를 결정하는 핸들러입니다
-func AnalyzeCycle(analyzerService _interface.AnalyzerService, ocrService _interface.OcrService) fiber.Handler {
+func AnalyzeCycle(analyzerService _interface.AnalyzerService, detectorService _interface.DetectorService) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		var req struct {
 			State  model.OcrQueueState `json:"state"`
