@@ -13,19 +13,19 @@ import (
 // SearchImpl는 검색 서비스 구현체입니다
 type SearchImpl struct {
 	_interface.Service
-	naverClient *naver.NaverAPIClient
-	postService _interface.PostService
+	naverClient     *naver.NaverAPIClient
+	analyzerService _interface.AnalyzerService
 }
 
 // NewSearchService는 새 검색 서비스를 생성합니다
-func NewSearchService(postService _interface.PostService) _interface.SearchService {
+func NewSearchService(analyzerService _interface.AnalyzerService) _interface.SearchService {
 	config := configs.GetConfig()
 	naverClient := naver.NewNaverAPIClient(config)
 
 	return &SearchImpl{
-		Service:     _interface.Service{Config: config},
-		naverClient: naverClient,
-		postService: postService,
+		Service:         _interface.Service{Config: config},
+		naverClient:     naverClient,
+		analyzerService: analyzerService,
 	}
 }
 
@@ -43,7 +43,7 @@ func (s *SearchImpl) SearchAnalyzedResponses(req request.SearchQuery) ([]structu
 
 	// 스폰서 감지 (실패해도 계속 진행)
 	var posts []structure.AnalyzedResponse
-	posts, err = s.postService.DetectPosts(searchResp.Items)
+	posts, err = s.analyzerService.AnalyzePosts(searchResp.Items)
 	if err != nil {
 		fmt.Printf("스폰서 감지 중 무시된 오류: %v\n", err)
 		// 오류 발생 시 빈 슬라이스 반환

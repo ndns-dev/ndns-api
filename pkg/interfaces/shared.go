@@ -13,9 +13,8 @@ type Service struct {
 
 // ServiceContainer는 모든 서비스 인스턴스를 보관합니다
 type ServiceContainer struct {
-	OcrService      OcrService
+	DetectorService DetectorService
 	SearchService   SearchService
-	PostService     PostService
 	AnalyzerService AnalyzerService
 	OcrRepository   OcrRepository
 }

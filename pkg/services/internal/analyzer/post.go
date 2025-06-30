@@ -1,112 +1,19 @@
 package analyzer
 
 import (
-	"strings"
+	"fmt"
+	"sync"
 
+	"github.com/google/uuid"
+	"github.com/sh5080/ndns-go/pkg/services/internal/crawler"
+	"github.com/sh5080/ndns-go/pkg/services/internal/detector"
+	model "github.com/sh5080/ndns-go/pkg/types/models"
 	structure "github.com/sh5080/ndns-go/pkg/types/structures"
+	utils "github.com/sh5080/ndns-go/pkg/utils"
 )
 
-// CreateAnalyzedResponse는 기본 블로그 포스트 구조체를 생성합니다
-func CreateAnalyzedResponse(item structure.NaverSearchItem) structure.AnalyzedResponse {
-	return structure.AnalyzedResponse{
-		NaverSearchItem:    item,
-		IsSponsored:        false,
-		SponsorProbability: 0,
-		SponsorIndicators:  []structure.SponsorIndicator{},
-	}
-}
-
-// CreateSponsoredAnalyzedResponse는 스폰서된 블로그 포스트 구조체를 생성합니다
-func CreateSponsoredAnalyzedResponse(
-	item structure.NaverSearchItem,
-	probability float64,
-	matchedText string,
-	indicatorType structure.IndicatorType,
-	patternType structure.PatternType,
-	sponsorType structure.SponsorType,
-	sourceText string,
-) structure.AnalyzedResponse {
-	// 협찬 표시자 생성
-	indicator := structure.SponsorIndicator{
-		Type:        indicatorType,
-		Pattern:     patternType,
-		MatchedText: matchedText,
-		Probability: probability,
-		Source: structure.SponsorSource{
-			SponsorType: sponsorType,
-			Text:        sourceText,
-		},
-	}
-
-	// 블로그 포스트 생성
-	return structure.AnalyzedResponse{
-		NaverSearchItem:    item,
-		IsSponsored:        true,
-		SponsorProbability: probability,
-		SponsorIndicators:  []structure.SponsorIndicator{indicator},
-		Error:              "",
-	}
-}
-
-// AddIndicator는 블로그 포스트에 협찬 표시자를 추가합니다
-func AddIndicator(
-	post *structure.AnalyzedResponse,
-	indicatorType structure.IndicatorType,
-	patternType structure.PatternType,
-	matchedText string,
-	probability float64,
-	sponsorType structure.SponsorType,
-	sourceText string,
-) {
-	// 새 협찬 표시자 생성
-	indicator := structure.SponsorIndicator{
-		Type:        indicatorType,
-		Pattern:     patternType,
-		MatchedText: matchedText,
-		Probability: probability,
-		Source: structure.SponsorSource{
-			SponsorType: sponsorType,
-			Text:        sourceText,
-		},
-	}
-
-	// 기존 표시자에 추가
-	post.SponsorIndicators = append(post.SponsorIndicators, indicator)
-
-	// 확률 업데이트 (가장 높은 확률 유지)
-	if probability > post.SponsorProbability {
-		post.SponsorProbability = probability
-	}
-
-	// 확률이 0보다 크면 스폰서로 표시
-	if probability > 0 {
-		post.IsSponsored = true
-	}
-}
-
-// CreateSponsorIndicator는 협찬 표시자를 생성합니다
-func CreateSponsorIndicator(
-	indicatorType structure.IndicatorType,
-	patternType structure.PatternType,
-	matchedText string,
-	probability float64,
-	sponsorType structure.SponsorType,
-	sourceText string,
-) structure.SponsorIndicator {
-	return structure.SponsorIndicator{
-		Type:        indicatorType,
-		Pattern:     patternType,
-		MatchedText: matchedText,
-		Probability: probability,
-		Source: structure.SponsorSource{
-			SponsorType: sponsorType,
-			Text:        sourceText,
-		},
-	}
-}
-
-// UpdateAnalyzedResponseWithSponsorInfo는 협찬 감지 결과를 블로그 포스트에 업데이트합니다
-func UpdateAnalyzedResponseWithSponsorInfo(
+// UpdateAnalyzedResponse는 협찬 감지 결과를 블로그 포스트에 업데이트합니다
+func updateAnalyzedResponse(
 	blogPost *structure.AnalyzedResponse,
 	isSponsored bool,
 	probability float64,
@@ -127,17 +34,102 @@ func UpdateAnalyzedResponseWithSponsorInfo(
 	blogPost.Error = "" // 협찬이 확인된 경우 에러 필드 초기화
 }
 
-// 이미지 Url에서 협찬 도메인을 확인하는 함수
-func CheckSponsorDomain(url string, domains []string) (bool, string) {
-	if url == "" {
-		return false, ""
+// AnalyzePosts는 여러 포스트에서 동시에 협찬 관련 텍스트를 분석합니다
+func (s *AnalyzerService) AnalyzePosts(posts []structure.NaverSearchItem) ([]structure.AnalyzedResponse, error) {
+	results := make([]structure.AnalyzedResponse, len(posts))
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	for i, post := range posts {
+		wg.Add(1)
+		go func(index int, item structure.NaverSearchItem) {
+			defer wg.Done()
+
+			utils.DebugLog("포스트 날짜: %v\n", item.PostDate)
+			is2025OrLater := utils.IsAfter2025(item.PostDate)
+			blogPost := structure.AnalyzedResponse{
+				NaverSearchItem:    item,
+				IsSponsored:        false,
+				SponsorProbability: 0,
+				SponsorIndicators:  []structure.SponsorIndicator{},
+			}
+
+			// 1. Description 텍스트 탐지 수행
+			isSponsored, probability, indicators := detector.DetectSponsor(item.Description, structure.SponsorTypeDescription)
+
+			if isSponsored {
+				updateAnalyzedResponse(&blogPost, isSponsored, probability, indicators)
+			} else {
+				// 2. Description에서 스폰서 탐지 실패시 본문 크롤링
+				crawlResult, err := crawler.CrawlAnalyzedResponse(item.Link, is2025OrLater)
+				if err != nil {
+					fmt.Printf("[%d] 크롤링 실패: %v\n", index, err)
+					blogPost.Error = fmt.Sprintf("크롤링 실패: %v", err)
+					mu.Lock()
+					results[index] = blogPost
+					mu.Unlock()
+					return
+				}
+
+				if crawlResult == nil {
+					blogPost.Error = "크롤링 결과가 없습니다"
+					mu.Lock()
+					results[index] = blogPost
+					mu.Unlock()
+					return
+				}
+
+				// 3. 첫 번째 문단 분석
+				if !blogPost.IsSponsored {
+					isSponsored, probability, indicators := detector.DetectSponsor(crawlResult.FirstParagraph, structure.SponsorTypeParagraph)
+					if isSponsored {
+						updateAnalyzedResponse(&blogPost, isSponsored, probability, indicators)
+					}
+				}
+
+				// 4. 마지막 문단 분석 (2025년 이전 포스트만)
+				if !blogPost.IsSponsored && !is2025OrLater && crawlResult.LastParagraph != "" && crawlResult.LastParagraph != crawlResult.FirstParagraph {
+					isSponsored, probability, indicators := detector.DetectSponsor(crawlResult.LastParagraph, structure.SponsorTypeParagraph)
+					if isSponsored {
+						updateAnalyzedResponse(&blogPost, isSponsored, probability, indicators)
+					}
+				}
+
+				// 5. 이미지 URL에서 협찬 도메인 패턴 확인
+				if !blogPost.IsSponsored {
+					isSponsored, probability, indicators := detector.CheckSponsorImagesInCrawlResult(crawlResult)
+					if isSponsored {
+						updateAnalyzedResponse(&blogPost, isSponsored, probability, indicators)
+					} else {
+						// 6. 이미지 URL에서 협찬이 발견되지 않은 경우 Ocr 요청 전송 시작
+						jobId := uuid.New().String()
+						// Ocr 요청 상태 표시
+						pendingIndicator := detector.CreatePendingIndicator(jobId)
+						blogPost.SponsorIndicators = append(blogPost.SponsorIndicators, pendingIndicator)
+
+						// Ocr 요청 상태 초기화
+						state := model.OcrQueueState{
+							JobId:           jobId,
+							CrawlResult:     crawlResult,
+							CurrentPosition: model.OcrPositionStart,
+							Is2025OrLater:   is2025OrLater,
+						}
+
+						// 첫 번째 Ocr 요청
+						err := s.detectorService.RequestNextOcr(state)
+						if err != nil {
+							utils.DebugLog("Ocr 요청 실패: %v\n", err)
+						}
+					}
+				}
+			}
+
+			mu.Lock()
+			results[index] = blogPost
+			mu.Unlock()
+		}(i, post)
 	}
 
-	for _, domain := range domains {
-		if strings.Contains(url, domain) {
-			return true, domain
-		}
-	}
-
-	return false, ""
+	wg.Wait()
+	return results, nil
 }

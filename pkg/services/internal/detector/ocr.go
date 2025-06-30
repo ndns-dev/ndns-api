@@ -1,36 +1,13 @@
 package detector
 
 import (
-	_interface "github.com/sh5080/ndns-go/pkg/interfaces"
-	"github.com/sh5080/ndns-go/pkg/services/internal/common"
 	model "github.com/sh5080/ndns-go/pkg/types/models"
 	structure "github.com/sh5080/ndns-go/pkg/types/structures"
 )
 
-// OcrProcessResponse는 Ocr 처리 응답 구조체입니다
-type OcrProcessResponse struct {
-	JobId       string                       `json:"jobId"`
-	IsSponsored bool                         `json:"isSponsored"`
-	Probability float64                      `json:"probability"`
-	Indicators  []structure.SponsorIndicator `json:"indicators"`
-}
-
-// OcrService는 OCR 서비스 구현체입니다
-type OcrService struct {
-	_interface.Service
-	queueService _interface.QueueService
-}
-
-// NewOcrService는 새로운 OCR 서비스를 생성합니다
-func NewOcrService(queueService _interface.QueueService) _interface.OcrService {
-	return &OcrService{
-		queueService: queueService,
-	}
-}
-
 // RequestNextOcr은 다음 Ocr 처리를 요청합니다
-func (s *OcrService) RequestNextOcr(state model.OcrQueueState) error {
-	nextPosition := common.GetNextOcrPosition(state.CurrentPosition, state.Is2025OrLater)
+func (s *DetectorService) RequestNextOcr(state model.OcrQueueState) error {
+	nextPosition := GetNextOcrPosition(state.CurrentPosition, state.Is2025OrLater)
 
 	state.CurrentPosition = nextPosition
 	return s.queueService.SendQueue(state)
@@ -47,5 +24,31 @@ func CreatePendingIndicator(jobId string) structure.SponsorIndicator {
 			SponsorType: structure.SponsorTypeImage,
 			Text:        jobId,
 		},
+	}
+}
+
+// GetNextOcrPosition은 현재 위치에 따른 다음 OCR 위치를 반환합니다
+func GetNextOcrPosition(current model.OcrPosition, is2025OrLater bool) model.OcrPosition {
+	switch current {
+	case model.OcrPositionStart:
+		return model.OcrPositionFirstImage
+	case model.OcrPositionFirstImage:
+		return model.OcrPositionFirstSticker
+	case model.OcrPositionFirstSticker:
+		return model.OcrPositionSecondSticker
+	case model.OcrPositionSecondSticker:
+		if !is2025OrLater {
+			return model.OcrPositionLastImage
+		}
+		return ""
+	case model.OcrPositionLastImage:
+		if !is2025OrLater {
+			return model.OcrPositionLastSticker
+		}
+		return ""
+	case model.OcrPositionLastSticker:
+		return ""
+	default:
+		return ""
 	}
 }
