@@ -35,7 +35,7 @@ func updateAnalyzedResponse(
 }
 
 // AnalyzePosts는 여러 포스트에서 동시에 협찬 관련 텍스트를 분석합니다
-func (s *AnalyzerService) AnalyzePosts(posts []structure.NaverSearchItem) ([]structure.AnalyzedResponse, error) {
+func (s *AnalyzerService) AnalyzePosts(posts []structure.NaverSearchItem, reqId string) ([]structure.AnalyzedResponse, error) {
 	results := make([]structure.AnalyzedResponse, len(posts))
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -110,6 +110,7 @@ func (s *AnalyzerService) AnalyzePosts(posts []structure.NaverSearchItem) ([]str
 						// Ocr 요청 상태 초기화
 						state := model.OcrQueueState{
 							JobId:           jobId,
+							ReqId:           reqId,
 							CrawlResult:     crawlResult,
 							CurrentPosition: model.OcrPositionStart,
 							Is2025OrLater:   is2025OrLater,

@@ -30,7 +30,7 @@ func NewSearchService(analyzerService _interface.AnalyzerService) _interface.Sea
 }
 
 // SearchAnalyzedResponses는 검색어로 블로그 포스트를 검색합니다
-func (s *SearchImpl) SearchAnalyzedResponses(req request.SearchQuery) ([]structure.AnalyzedResponse, int, error) {
+func (s *SearchImpl) SearchAnalyzedResponses(req request.SearchQuery, reqId string) ([]structure.AnalyzedResponse, int, error) {
 	if s.naverClient == nil {
 		return nil, 0, fmt.Errorf("네이버 API 클라이언트가 초기화되지 않았습니다")
 	}
@@ -43,7 +43,7 @@ func (s *SearchImpl) SearchAnalyzedResponses(req request.SearchQuery) ([]structu
 
 	// 스폰서 감지 (실패해도 계속 진행)
 	var posts []structure.AnalyzedResponse
-	posts, err = s.analyzerService.AnalyzePosts(searchResp.Items)
+	posts, err = s.analyzerService.AnalyzePosts(searchResp.Items, reqId)
 	if err != nil {
 		fmt.Printf("스폰서 감지 중 무시된 오류: %v\n", err)
 		// 오류 발생 시 빈 슬라이스 반환

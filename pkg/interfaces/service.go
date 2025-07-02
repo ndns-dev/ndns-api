@@ -25,7 +25,7 @@ type ServiceContainer struct {
 // SearchService는 검색 서비스 인터페이스입니다
 type SearchService interface {
 	// SearchAnalyzedResponses는 검색어로 블로그 포스트를 검색합니다
-	SearchAnalyzedResponses(req request.SearchQuery) ([]structure.AnalyzedResponse, int, error)
+	SearchAnalyzedResponses(req request.SearchQuery, reqId string) ([]structure.AnalyzedResponse, int, error)
 }
 
 type AnalyzerService interface {
@@ -34,7 +34,7 @@ type AnalyzerService interface {
 	// AnalyzeCycle은 OCR 결과를 분석하고 다음 OCR 요청 여부를 결정합니다
 	AnalyzeCycle(state model.OcrQueueState, result model.OcrResult) (*structure.AnalyzedResponse, error)
 	// AnalyzePosts는 블로그 포스트에서 협찬 관련 텍스트를 감지합니다
-	AnalyzePosts(posts []structure.NaverSearchItem) ([]structure.AnalyzedResponse, error)
+	AnalyzePosts(posts []structure.NaverSearchItem, reqId string) ([]structure.AnalyzedResponse, error)
 }
 
 // CrawlerService는 블로그 콘텐츠를 크롤링하는 인터페이스입니다
