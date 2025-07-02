@@ -1,5 +1,9 @@
 package request
 
+import (
+	model "github.com/sh5080/ndns-go/pkg/types/models"
+)
+
 // SearchQuery는 검색 요청 쿼리를 나타냅니다.
 type SearchQuery struct {
 	Query  string `json:"query" validate:"required,min=2,max=100"`
@@ -10,4 +14,10 @@ type SearchQuery struct {
 // AnalyzeTextParam는 텍스트 분석 요청 구조체입니다
 type AnalyzeTextParam struct {
 	Text string `json:"text"`
+}
+
+// AnalyzeCycleParam는 텍스트 분석 요청 구조체입니다
+type AnalyzeCycleParam struct {
+	State  model.OcrQueueState `json:"state"`
+	Result model.OcrResult     `json:"result"`
 }
