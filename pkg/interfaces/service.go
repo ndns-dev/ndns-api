@@ -4,7 +4,8 @@ import (
 	"net/http"
 
 	"github.com/sh5080/ndns-go/pkg/configs"
-	request "github.com/sh5080/ndns-go/pkg/types/dtos/requests"
+	requestDto "github.com/sh5080/ndns-go/pkg/types/dtos/requests"
+	responseDto "github.com/sh5080/ndns-go/pkg/types/dtos/responses"
 	model "github.com/sh5080/ndns-go/pkg/types/models"
 	structure "github.com/sh5080/ndns-go/pkg/types/structures"
 )
@@ -25,16 +26,16 @@ type ServiceContainer struct {
 // SearchService는 검색 서비스 인터페이스입니다
 type SearchService interface {
 	// SearchAnalyzedResponses는 검색어로 블로그 포스트를 검색합니다
-	SearchAnalyzedResponses(req request.SearchQuery, reqId string) ([]structure.AnalyzedResponse, int, error)
+	SearchAnalyzedResponses(req requestDto.SearchQuery, reqId string) ([]responseDto.AnalyzedResponse, int, error)
 }
 
 type AnalyzerService interface {
 	// AnalyzeText는 텍스트를 분석하고 협찬 여부를 판단합니다
-	AnalyzeText(req request.AnalyzeTextParam) (*structure.AnalyzedResponse, error)
+	AnalyzeText(req requestDto.AnalyzeTextParam) (*responseDto.AnalyzedResponse, error)
 	// AnalyzeCycle은 OCR 결과를 분석하고 다음 OCR 요청 여부를 결정합니다
-	AnalyzeCycle(state model.OcrQueueState, result model.OcrResult) (*structure.AnalyzedResponse, error)
+	AnalyzeCycle(state model.OcrQueueState, result model.OcrResult) (*responseDto.AnalyzedResponse, error)
 	// AnalyzePosts는 블로그 포스트에서 협찬 관련 텍스트를 감지합니다
-	AnalyzePosts(posts []structure.NaverSearchItem, reqId string) ([]structure.AnalyzedResponse, error)
+	AnalyzePosts(posts []structure.NaverSearchItem, reqId string) ([]responseDto.AnalyzedResponse, error)
 }
 
 // CrawlerService는 블로그 콘텐츠를 크롤링하는 인터페이스입니다

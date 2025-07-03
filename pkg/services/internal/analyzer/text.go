@@ -7,12 +7,13 @@ import (
 
 	"github.com/sh5080/ndns-go/pkg/services/internal/detector"
 	requestDto "github.com/sh5080/ndns-go/pkg/types/dtos/requests"
+	responseDto "github.com/sh5080/ndns-go/pkg/types/dtos/responses"
 	model "github.com/sh5080/ndns-go/pkg/types/models"
 	structure "github.com/sh5080/ndns-go/pkg/types/structures"
 )
 
 // AnalyzeText는 텍스트를 분석하고 협찬 여부를 판단합니다
-func (s *AnalyzerService) AnalyzeText(req requestDto.AnalyzeTextParam) (*structure.AnalyzedResponse, error) {
+func (s *AnalyzerService) AnalyzeText(req requestDto.AnalyzeTextParam) (*responseDto.AnalyzedResponse, error) {
 	if req.Text == "" {
 		return nil, fmt.Errorf("text가 비어있습니다")
 	}
@@ -24,7 +25,7 @@ func (s *AnalyzerService) AnalyzeText(req requestDto.AnalyzeTextParam) (*structu
 
 	// 스티커 타입에 대한 특별 처리
 	if !hangulRegex.MatchString(trimmedText) && len(trimmedText) < 10 {
-		return &structure.AnalyzedResponse{
+		return &responseDto.AnalyzedResponse{
 			IsSponsored: false,
 		}, nil
 	}
@@ -32,7 +33,7 @@ func (s *AnalyzerService) AnalyzeText(req requestDto.AnalyzeTextParam) (*structu
 	// 협찬 여부 감지
 	isSponsored, probability, indicators := detector.DetectSponsor(trimmedText, structure.SponsorTypeImage)
 
-	return &structure.AnalyzedResponse{
+	return &responseDto.AnalyzedResponse{
 		IsSponsored:        isSponsored,
 		SponsorProbability: probability,
 		SponsorIndicators:  indicators,
@@ -40,7 +41,7 @@ func (s *AnalyzerService) AnalyzeText(req requestDto.AnalyzeTextParam) (*structu
 }
 
 // AnalyzeCycle은 OCR 결과를 분석하고 다음 OCR 요청 여부를 결정합니다
-func (s *AnalyzerService) AnalyzeCycle(state model.OcrQueueState, result model.OcrResult) (*structure.AnalyzedResponse, error) {
+func (s *AnalyzerService) AnalyzeCycle(state model.OcrQueueState, result model.OcrResult) (*responseDto.AnalyzedResponse, error) {
 	req := requestDto.AnalyzeTextParam{
 		Text: result.OcrText,
 	}

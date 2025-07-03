@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sh5080/ndns-go/pkg/services/internal/crawler"
 	"github.com/sh5080/ndns-go/pkg/services/internal/detector"
+	responseDto "github.com/sh5080/ndns-go/pkg/types/dtos/responses"
 	model "github.com/sh5080/ndns-go/pkg/types/models"
 	structure "github.com/sh5080/ndns-go/pkg/types/structures"
 	utils "github.com/sh5080/ndns-go/pkg/utils"
@@ -14,7 +15,7 @@ import (
 
 // UpdateAnalyzedResponse는 협찬 감지 결과를 블로그 포스트에 업데이트합니다
 func updateAnalyzedResponse(
-	blogPost *structure.AnalyzedResponse,
+	blogPost *responseDto.AnalyzedResponse,
 	isSponsored bool,
 	probability float64,
 	indicators []structure.SponsorIndicator,
@@ -35,8 +36,8 @@ func updateAnalyzedResponse(
 }
 
 // AnalyzePosts는 여러 포스트에서 동시에 협찬 관련 텍스트를 분석합니다
-func (s *AnalyzerService) AnalyzePosts(posts []structure.NaverSearchItem, reqId string) ([]structure.AnalyzedResponse, error) {
-	results := make([]structure.AnalyzedResponse, len(posts))
+func (s *AnalyzerService) AnalyzePosts(posts []structure.NaverSearchItem, reqId string) ([]responseDto.AnalyzedResponse, error) {
+	results := make([]responseDto.AnalyzedResponse, len(posts))
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 
@@ -47,7 +48,7 @@ func (s *AnalyzerService) AnalyzePosts(posts []structure.NaverSearchItem, reqId 
 
 			utils.DebugLog("포스트 날짜: %v\n", item.PostDate)
 			is2025OrLater := utils.IsAfter2025(item.PostDate)
-			blogPost := structure.AnalyzedResponse{
+			blogPost := responseDto.AnalyzedResponse{
 				NaverSearchItem:    item,
 				IsSponsored:        false,
 				SponsorProbability: 0,
