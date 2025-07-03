@@ -32,11 +32,3 @@ type SponsorSource struct {
 	SponsorType SponsorType `json:"sponsorType"`
 	Text        string      `json:"text"`
 }
-
-type AnalyzedResponse struct {
-	NaverSearchItem
-	IsSponsored        bool               `json:"isSponsored"`
-	SponsorProbability float64            `json:"sponsorProbability"`
-	SponsorIndicators  []SponsorIndicator `json:"sponsorIndicators"`
-	Error              string             `json:"error,omitempty"`
-}

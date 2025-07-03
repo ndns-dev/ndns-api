@@ -1,6 +1,8 @@
 package response
 
-import "time"
+import (
+	"time"
+)
 
 // HealthResponse는 상태 확인 요청에 대한 응답을 나타냅니다.
 type HealthResponse struct {
@@ -9,4 +11,10 @@ type HealthResponse struct {
 	Version   string    `json:"version"`
 	Uptime    string    `json:"uptime"`
 	GoVersion string    `json:"goVersion"`
+}
+
+type ErrorResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+	Error   string `json:"error"`
 }

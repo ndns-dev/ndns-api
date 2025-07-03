@@ -29,3 +29,10 @@ type AnalyzedResponse struct {
 	SponsorIndicators  []structure.SponsorIndicator `json:"sponsorIndicators"`
 	Error              string                       `json:"error,omitempty"`
 }
+
+type AnalyzeJobResponse struct {
+	IsSponsored        bool                       `json:"isSponsored"`
+	SponsorProbability float64                    `json:"sponsorProbability"`
+	SponsorIndicator   structure.SponsorIndicator `json:"sponsorIndicator"`
+	Error              string                     `json:"error,omitempty"`
+}
