@@ -225,12 +225,15 @@ func (r *OcrRepositoryImpl) GetOcrJob(jobId string) (*model.OcrQueueState, error
 			"JobId": &types.AttributeValueMemberS{Value: jobId},
 		},
 	})
+	if output == nil {
+		return nil, fmt.Errorf("조회 결과가 없습니다. jobId: %s", jobId)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("DynamoDB 조회 실패: %v", err)
 	}
 
 	if output.Item == nil {
-		return nil, fmt.Errorf("ocr 작업을 찾을 수 없음: %s", jobId)
+		return nil, fmt.Errorf("ocr 작업을 찾을 수 없습니다. jobId: %s", jobId)
 	}
 
 	// 결과 파싱
