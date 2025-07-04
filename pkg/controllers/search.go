@@ -13,29 +13,25 @@ import (
 
 // Search는 검색 요청을 처리하는 핸들러입니다
 func Search(searchService _interface.SearchService) fiber.Handler {
-	return func(c *fiber.Ctx) error {
+	return func(ctx *fiber.Ctx) error {
 		// 요청 ID 생성
 		reqId := uuid.New().String()
-		c.Set("X-ReqId", reqId)
+		ctx.Set("X-Req-Id", reqId)
+		ctx.Set("Access-Control-Expose-Headers", "X-Req-Id")
 
-		queries := c.Queries()
+		queries := ctx.Queries()
 		var req requestDto.SearchQuery
 		if err := utils.ParseAndValidate(queries, &req); err != nil {
-			fmt.Printf("[ReqId: %s] 검증 오류: %v\n", reqId, err)
-			return err
+			return utils.AppError(ctx, fiber.StatusBadRequest, err, "검증 오류")
 		}
-		fmt.Printf("[ReqId: %s] 검증된 DTO: %+v\n", reqId, req)
 
 		limit, offset := utils.PaginationRequest(req.Limit, req.Offset)
-		fmt.Printf("[ReqId: %s] limit: %d, offset: %d\n", reqId, limit, offset)
 
 		// reqId를 함께 전달
 		posts, totalResults, err := searchService.SearchAnalyzedResponses(req, reqId)
 
 		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "검색 중 오류 발생: " + err.Error(),
-			})
+			return utils.AppError(ctx, fiber.StatusInternalServerError, err, "검색 중 오류 발생")
 		}
 		var SponsoredResults int
 		for _, post := range posts {
@@ -53,62 +49,54 @@ func Search(searchService _interface.SearchService) fiber.Handler {
 			Posts:            posts,
 		}
 
-		return c.JSON(response)
-	}
-}
-
-// AnalyzeText는 텍스트 분석을 요청하는 핸들러입니다
-func AnalyzeText(analyzerService _interface.AnalyzerService) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		var req requestDto.AnalyzeTextParam
-		if err := c.BodyParser(&req); err != nil {
-			fmt.Printf("검증 오류: %v\n", err)
-			return err
-		}
-
-		post, err := analyzerService.AnalyzeText(req)
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "텍스트 분석 중 오류 발생: " + err.Error(),
-			})
-		}
-		response := responseDto.AnalyzeText{
-			IsSponsored: post.IsSponsored,
-			Probability: post.SponsorProbability,
-			Indicators:  post.SponsorIndicators,
-		}
-		return c.JSON(response)
+		return ctx.JSON(response)
 	}
 }
 
 // AnalyzeCycle은 OCR 결과를 분석하고 다음 OCR 요청 여부를 결정하는 핸들러입니다
 func AnalyzeCycle(analyzerService _interface.AnalyzerService, detectorService _interface.DetectorService) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		// 요청 바디 로깅
-		bodyStr := string(c.Body())
-		if bodyStr == "" {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "요청 바디가 비어있습니다",
-			})
-		}
-		fmt.Printf("수신된 요청 바디: %s\n", bodyStr)
-
+	return func(ctx *fiber.Ctx) error {
 		var req requestDto.AnalyzeCycleParam
-		if err := c.BodyParser(&req); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": fmt.Sprintf("JSON 파싱 실패: %v", err),
-			})
+		if err := ctx.BodyParser(&req); err != nil {
+			return utils.AppError(ctx, fiber.StatusBadRequest, err, "JSON 파싱 실패")
 		}
 
 		// OCR 결과 처리 및 다음 OCR 요청
+		fmt.Printf("cycle 전 req.State.ReqId: %v\n", req.State.ReqId)
+		fmt.Printf("cycle 전 req.State.JobId: %v\n", req.State.JobId)
+		fmt.Printf("cycle 전 req.State.CurrentPosition: %v\n", req.State.CurrentPosition)
+		fmt.Printf("cycle 전 req.Result.OcrText: %v\n", req.Result.OcrText)
+		// OCR 결과 처리 및 다음 OCR 요청
 		response, err := analyzerService.AnalyzeCycle(req.State, req.Result)
 		if err != nil {
-			fmt.Printf("OCR 처리 실패: %v\n", err)
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "OCR 처리 실패: " + err.Error(),
-			})
+			fmt.Printf("OCR 처리 실패: %v", err)
+			return utils.AppError(ctx, fiber.StatusBadRequest, err, "OCR 처리 실패")
+		}
+		fmt.Printf("cycle 후 response.IsSponsored: %v\n", response.IsSponsored)
+		fmt.Printf("cycle 후 response.SponsorProbability: %v\n", response.SponsorProbability)
+		fmt.Printf("cycle 후 response.SponsorIndicators: %v\n", response.SponsorIndicators)
+
+		return ctx.JSON(response)
+	}
+}
+
+func AnalyzePostByJobId(searchService _interface.SearchService, analyzerService _interface.AnalyzerService) fiber.Handler {
+	return func(ctx *fiber.Ctx) error {
+		// OCR 결과 처리 및 다음 OCR 요청
+		jobId := ctx.Params("jobId")
+		job, result, err := searchService.GetJobDetail(jobId)
+
+		if err != nil {
+			fmt.Printf("OCR 처리 실패: %v", err)
+			return utils.AppError(ctx, fiber.StatusNotFound, err, "OCR 처리 실패")
 		}
 
-		return c.JSON(response)
+		response, err := analyzerService.AnalyzeCycle(job, result)
+		if err != nil {
+			fmt.Printf("OCR 처리 실패: %v", err)
+			return utils.AppError(ctx, fiber.StatusBadRequest, err, "OCR 처리 실패")
+		}
+
+		return ctx.JSON(response)
 	}
 }
