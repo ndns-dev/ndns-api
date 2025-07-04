@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"runtime/debug"
 	"sync"
 	"time"
 )
@@ -135,4 +136,8 @@ func DebugLog(format string, args ...interface{}) {
 	if IsDebug() {
 		Debug("system", format, args...)
 	}
+}
+
+func GetStackTrace() string {
+	return string(debug.Stack())
 }
