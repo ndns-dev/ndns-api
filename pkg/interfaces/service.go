@@ -27,11 +27,13 @@ type ServiceContainer struct {
 type SearchService interface {
 	// SearchAnalyzedResponses는 검색어로 블로그 포스트를 검색합니다
 	SearchAnalyzedResponses(req requestDto.SearchQuery, reqId string) ([]responseDto.AnalyzedResponse, int, error)
+	// GetJobDetail은 작업 상세 정보를 조회합니다
+	GetJobDetail(id string) (model.OcrQueueState, model.OcrResult, error)
 }
 
 type AnalyzerService interface {
 	// AnalyzeText는 텍스트를 분석하고 협찬 여부를 판단합니다
-	AnalyzeText(req requestDto.AnalyzeTextParam) (*responseDto.AnalyzedResponse, error)
+	AnalyzeText(text string) (*responseDto.AnalyzedResponse, error)
 	// AnalyzeCycle은 OCR 결과를 분석하고 다음 OCR 요청 여부를 결정합니다
 	AnalyzeCycle(state model.OcrQueueState, result model.OcrResult) (*responseDto.AnalyzedResponse, error)
 	// AnalyzePosts는 블로그 포스트에서 협찬 관련 텍스트를 감지합니다
