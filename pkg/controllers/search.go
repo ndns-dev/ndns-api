@@ -72,9 +72,8 @@ func AnalyzeCycle(analyzerService _interface.AnalyzerService, detectorService _i
 			fmt.Printf("OCR 처리 실패: %v", err)
 			return utils.AppError(ctx, fiber.StatusBadRequest, err, "OCR 처리 실패")
 		}
-		fmt.Printf("cycle 후 response.IsSponsored: %v\n", response.IsSponsored)
-		fmt.Printf("cycle 후 response.SponsorProbability: %v\n", response.SponsorProbability)
-		fmt.Printf("cycle 후 response.SponsorIndicators: %v\n", response.SponsorIndicators)
+		fmt.Printf("\n=== Request 전체 정보 ===\n%+v\n", req)
+		fmt.Printf("\n=== AnalyzeCycle Response 전체 정보 ===\n%+v\n", response)
 
 		return ctx.JSON(response)
 	}
