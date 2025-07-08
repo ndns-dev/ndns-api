@@ -12,7 +12,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o ndns-go ./cmd/server/main.go
 
 # 런타임 스테이지
-FROM sh5080/tesseract:latest
+FROM alpine:3.19
 
 WORKDIR /app
 
