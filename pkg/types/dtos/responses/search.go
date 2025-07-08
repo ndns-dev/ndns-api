@@ -31,6 +31,8 @@ type AnalyzedResponse struct {
 }
 
 type AnalyzeJobResponse struct {
+	ReqId              string                     `json:"reqId"`
+	JobId              string                     `json:"jobId"`
 	IsSponsored        bool                       `json:"isSponsored"`
 	SponsorProbability float64                    `json:"sponsorProbability"`
 	SponsorIndicator   structure.SponsorIndicator `json:"sponsorIndicator"`
