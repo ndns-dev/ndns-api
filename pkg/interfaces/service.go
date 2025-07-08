@@ -35,7 +35,7 @@ type AnalyzerService interface {
 	// AnalyzeText는 텍스트를 분석하고 협찬 여부를 판단합니다
 	AnalyzeText(text string) (*responseDto.AnalyzedResponse, error)
 	// AnalyzeCycle은 OCR 결과를 분석하고 다음 OCR 요청 여부를 결정합니다
-	AnalyzeCycle(state model.OcrQueueState, result model.OcrResult) (*responseDto.AnalyzedResponse, error)
+	AnalyzeCycle(state model.OcrQueueState, result model.OcrResult) (*responseDto.AnalyzeJobResponse, error)
 	// AnalyzePosts는 블로그 포스트에서 협찬 관련 텍스트를 감지합니다
 	AnalyzePosts(posts []structure.NaverSearchItem, reqId string) ([]responseDto.AnalyzedResponse, error)
 }
