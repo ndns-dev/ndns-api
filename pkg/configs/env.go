@@ -19,6 +19,7 @@ type EnvConfig struct {
 		WorkerUrl string `env:"WORKER_URL,required"`
 		AppName   string `env:"APP_NAME,required"`
 		AppUrl    string `env:"APP_URL,required"`
+		RouterUrl string `env:"ROUTER_URL,required"`
 	}
 	AWS struct {
 		AccessKeyId      string `env:"AWS_ACCESS_KEY_ID,required"`
