@@ -141,3 +141,10 @@ func DebugLog(format string, args ...interface{}) {
 func GetStackTrace() string {
 	return string(debug.Stack())
 }
+
+func WebhookLog(format string, args ...interface{}) {
+	webhookURL := os.Getenv("WEBHOOK_URL")
+	if webhookURL == "" {
+		return
+	}
+}
