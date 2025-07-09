@@ -1,7 +1,12 @@
 package utils
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
+	"log"
+	"net/http"
 	"os"
 	"runtime"
 	"runtime/debug"
@@ -146,5 +151,42 @@ func WebhookLog(format string, args ...interface{}) {
 	webhookURL := os.Getenv("WEBHOOK_URL")
 	if webhookURL == "" {
 		return
+	}
+
+	message := fmt.Sprintf(format, args...)
+
+	// Discord 웹훅 메시지 구조
+	payload := map[string]interface{}{
+		"content": message,
+		"embeds": []map[string]interface{}{
+			{
+				"title":       "NDNS-GO 로그 알림",
+				"description": message,
+				"color":       0x00ff00, // 초록색
+				"timestamp":   time.Now().Format(time.RFC3339),
+				"footer": map[string]string{
+					"text": "NDNS-GO Logger",
+				},
+			},
+		},
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("웹훅 JSON 생성 실패: %v", err)
+		return
+	}
+
+	// HTTP POST 요청
+	resp, err := http.Post(webhookURL, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Printf("웹훅 전송 실패: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("웹훅 전송 실패 (상태 코드: %d): %s", resp.StatusCode, string(body))
 	}
 }
