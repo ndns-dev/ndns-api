@@ -66,7 +66,7 @@ func AnalyzeCycle(analyzerService _interface.AnalyzerService, detectorService _i
 			fmt.Printf("OCR 처리 실패: %v", err)
 			return utils.AppError(ctx, fiber.StatusBadRequest, err, "OCR 처리 실패")
 		}
-		fmt.Printf("\n=== AnalyzeCycle Response 전체 정보 ===\n%+v\n", response)
+		utils.Info("AnalyzeCycle", "lambda에서 받은 AnalyzeCycle Response 전체 정보 ===\n%+v\n==============\n", response)
 
 		return ctx.JSON(response)
 	}

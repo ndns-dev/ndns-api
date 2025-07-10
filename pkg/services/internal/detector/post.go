@@ -15,7 +15,7 @@ func DetectSponsor(text string, sourceType structure.SponsorType) (bool, float64
 	maxProbability := 0.0
 	isSponsored := false
 	text = strings.ReplaceAll(text, " ", "")
-	utils.DebugLog("협찬 탐지 시작: %s\n", text)
+	utils.Info("DetectSponsor", "텍스트 검증 시작\n")
 	// 1. SPECIAL_CASE_PATTERNS 패턴 확인
 	for _, pattern := range structure.SPECIAL_CASE_PATTERNS {
 		// terms1과 terms2 모두 포함하는지 확인

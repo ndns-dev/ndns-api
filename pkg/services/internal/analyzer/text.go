@@ -3,6 +3,7 @@ package analyzer
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"strings"
@@ -69,23 +70,21 @@ func (s *AnalyzerService) AnalyzeCycle(state model.OcrQueueState, result model.O
 		fmt.Printf("RequestedAt: %v\n", state.RequestedAt)
 		fmt.Printf("CrawlResult: %+v\n", state.CrawlResult)
 
-		fmt.Printf("\n=== Analyzed 결과 ===\n")
+		fmt.Printf("\n=== Analyzed 결과 라우터로 전송 시작 ===\n")
 		fmt.Printf("IsSponsored: %v\n", analyzed.IsSponsored)
 		fmt.Printf("SponsorProbability: %v\n", analyzed.SponsorProbability)
 		fmt.Printf("SponsorIndicators: %+v\n", analyzed.SponsorIndicators)
 
-		fmt.Printf("\n=== OCR 결과 ===\n")
-		fmt.Printf("OCR Text: %s\n", result.OcrText)
-
 		routerUrl := configs.GetConfig().Server.RouterUrl + "/internal/analysis"
 		analyzedResponse := utils.MustMarshal(analyzeJobResponse)
 		resp, err := http.Post(routerUrl, "application/json", bytes.NewBuffer(analyzedResponse))
-		fmt.Println("라우터 서버 전송 결과::: ", resp.Body)
 		if err != nil {
 			log.Printf("라우터 서버 전송 실패: %v", err)
-			// 에러가 발생해도 분석 결과는 반환
 		} else {
-			resp.Body.Close()
+			defer resp.Body.Close()
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			fmt.Printf("\n=== 라우터 서버 응답 ===\nStatus: %d\nBody: %s\n", resp.StatusCode, string(bodyBytes))
+			utils.WebhookLog("라우터 서버 응답: %+v", string(bodyBytes))
 		}
 
 		return &analyzeJobResponse, nil

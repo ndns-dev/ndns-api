@@ -3,11 +3,14 @@ package detector
 import (
 	model "github.com/sh5080/ndns-go/pkg/types/models"
 	structure "github.com/sh5080/ndns-go/pkg/types/structures"
+	"github.com/sh5080/ndns-go/pkg/utils"
 )
 
 // RequestNextOcr은 다음 Ocr 처리를 요청합니다
 func (s *DetectorService) RequestNextOcr(state model.OcrQueueState) error {
+	utils.Info("RequestNextOcr", "RequestNextOcr 시작: %+v\n", state.CurrentPosition)
 	nextPosition := GetNextOcrPosition(state.CurrentPosition, state.Is2025OrLater)
+	utils.Info("RequestNextOcr", "확인하는 이미지 위치: %+v\n", nextPosition)
 
 	state.CurrentPosition = nextPosition
 	return s.queueService.SendQueue(state)
