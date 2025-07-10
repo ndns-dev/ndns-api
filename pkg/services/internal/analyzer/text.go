@@ -1,16 +1,11 @@
 package analyzer
 
 import (
-	"bytes"
 	"fmt"
-	"io"
-	"net/http"
 	"regexp"
 	"strings"
 
-	"log"
-
-	"github.com/sh5080/ndns-go/pkg/configs"
+	client "github.com/sh5080/ndns-go/pkg/clients"
 	"github.com/sh5080/ndns-go/pkg/services/internal/detector"
 	responseDto "github.com/sh5080/ndns-go/pkg/types/dtos/responses"
 	model "github.com/sh5080/ndns-go/pkg/types/models"
@@ -66,49 +61,25 @@ func (s *AnalyzerService) AnalyzeCycle(state model.OcrQueueState, result model.O
 	if len(analyzed.SponsorIndicators) > 0 {
 		analyzeJobResponse.SponsorIndicator = analyzed.SponsorIndicators[0]
 	}
-	// LastSticker이거나 협찬이 발견된 경우 추가 분석 없이 결과 반환
-	if state.CurrentPosition == model.OcrPositionLastSticker || analyzed.IsSponsored {
-		// 라우터 서버로 분석 결과 전송
-		fmt.Printf("\n=== State 정보 ===\n")
-		fmt.Printf("JobId: %s\n", state.JobId)
-		fmt.Printf("CurrentPosition: %v\n", state.CurrentPosition)
-		fmt.Printf("RequestedAt: %v\n", state.RequestedAt)
-		fmt.Printf("CrawlResult: %+v\n", state.CrawlResult)
 
-		fmt.Printf("\n=== Analyzed 결과 라우터로 전송 시작 ===\n")
-		fmt.Printf("IsSponsored: %v\n", analyzed.IsSponsored)
-		fmt.Printf("SponsorProbability: %v\n", analyzed.SponsorProbability)
-		fmt.Printf("SponsorIndicators: %+v\n", analyzed.SponsorIndicators)
-
-		routerUrl := configs.GetConfig().Server.RouterUrl + "/internal/analysis"
-		analyzedResponse := utils.MustMarshal(analyzeJobResponse)
-		resp, err := http.Post(routerUrl, "application/json", bytes.NewBuffer(analyzedResponse))
-		if err != nil {
-			log.Printf("라우터 서버 전송 실패: %v", err)
-		} else {
-			defer resp.Body.Close()
-			bodyBytes, _ := io.ReadAll(resp.Body)
-			fmt.Printf("\n=== 라우터 서버 응답 ===\nStatus: %d\nBody: %s\n", resp.StatusCode, string(bodyBytes))
-			utils.WebhookLog("라우터 서버 응답: %+v", string(bodyBytes))
-		}
-
+	// 협찬이 발견된 경우, 마지막 이미지인 경우 바로 결과 전송
+	if analyzed.IsSponsored || state.CurrentPosition == model.OcrPositionLastSticker {
+		client.SendAnalysis(&analyzeJobResponse, &state)
 		return &analyzeJobResponse, nil
 	}
-	fmt.Printf("[jobId: %v] analyzed.IsSponsored false 이므로 다음 OCR 요청 / state.CurrentPosition: %v\n", state.JobId, state.CurrentPosition)
-	// 다음 분석 위치가 있는 경우 SQS에 요청
+
+	// 다음 이미지 분석 시도
 	if err := s.detectorService.RequestNextOcr(state); err != nil {
-		if err.Error() == "finished" {
-			// 더 이상 분석할 이미지가 없는 경우는 협찬이 아닌 것으로 판단
-			utils.Info("AnalyzerService", "분석 완료 - 협찬 아님 (더 이상 분석할 이미지 없음): JobId=%s", state.JobId)
-			return &responseDto.AnalyzeJobResponse{
-				ReqId:              state.ReqId,
-				JobId:              state.JobId,
-				IsSponsored:        false,
-				SponsorProbability: 0,
-				SponsorIndicator:   detector.CreateNonSponsoredIndicator(state.JobId),
-			}, nil
+		if err.Error() != "finished" {
+			return nil, fmt.Errorf("다음 OCR 요청 실패: %v", err)
 		}
-		return nil, fmt.Errorf("다음 OCR 요청 실패: %v", err)
+		// 더 이상 분석할 이미지가 없는 경우는 협찬이 아닌 것으로 판단
+		utils.Info("AnalyzerService", "분석 완료 - 협찬 아님 (더 이상 분석할 이미지 없음): JobId=%s", state.JobId)
+		analyzeJobResponse.IsSponsored = false
+		analyzeJobResponse.SponsorProbability = 0
+		analyzeJobResponse.SponsorIndicator = detector.CreateNonSponsoredIndicator(state.JobId)
+		client.SendAnalysis(&analyzeJobResponse, &state)
+		return &analyzeJobResponse, nil
 	}
 
 	return &analyzeJobResponse, nil
