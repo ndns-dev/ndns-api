@@ -60,19 +60,12 @@ func AnalyzeCycle(analyzerService _interface.AnalyzerService, detectorService _i
 		if err := ctx.BodyParser(&req); err != nil {
 			return utils.AppError(ctx, fiber.StatusBadRequest, err, "JSON 파싱 실패")
 		}
-
-		// OCR 결과 처리 및 다음 OCR 요청
-		fmt.Printf("cycle 전 req.State.ReqId: %v\n", req.State.ReqId)
-		fmt.Printf("cycle 전 req.State.JobId: %v\n", req.State.JobId)
-		fmt.Printf("cycle 전 req.State.CurrentPosition: %v\n", req.State.CurrentPosition)
-		fmt.Printf("cycle 전 req.Result.OcrText: %v\n", req.Result.OcrText)
 		// OCR 결과 처리 및 다음 OCR 요청
 		response, err := analyzerService.AnalyzeCycle(req.State, req.Result)
 		if err != nil {
 			fmt.Printf("OCR 처리 실패: %v", err)
 			return utils.AppError(ctx, fiber.StatusBadRequest, err, "OCR 처리 실패")
 		}
-		fmt.Printf("\n=== Request 전체 정보 ===\n%+v\n", req)
 		fmt.Printf("\n=== AnalyzeCycle Response 전체 정보 ===\n%+v\n", response)
 
 		return ctx.JSON(response)
