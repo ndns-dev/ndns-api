@@ -97,6 +97,17 @@ func (s *AnalyzerService) AnalyzeCycle(state model.OcrQueueState, result model.O
 	fmt.Printf("[jobId: %v] analyzed.IsSponsored false 이므로 다음 OCR 요청 / state.CurrentPosition: %v\n", state.JobId, state.CurrentPosition)
 	// 다음 분석 위치가 있는 경우 SQS에 요청
 	if err := s.detectorService.RequestNextOcr(state); err != nil {
+		if err.Error() == "finished" {
+			// 더 이상 분석할 이미지가 없는 경우는 협찬이 아닌 것으로 판단
+			utils.Info("AnalyzerService", "분석 완료 - 협찬 아님 (더 이상 분석할 이미지 없음): JobId=%s", state.JobId)
+			return &responseDto.AnalyzeJobResponse{
+				ReqId:              state.ReqId,
+				JobId:              state.JobId,
+				IsSponsored:        false,
+				SponsorProbability: 0,
+				SponsorIndicator:   detector.CreateNonSponsoredIndicator(state.JobId),
+			}, nil
+		}
 		return nil, fmt.Errorf("다음 OCR 요청 실패: %v", err)
 	}
 
