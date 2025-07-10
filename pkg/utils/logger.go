@@ -147,26 +147,42 @@ func GetStackTrace() string {
 	return string(debug.Stack())
 }
 
+func formatMessage(format string, args ...interface{}) string {
+	message := fmt.Sprintf(format, args...)
+
+	// 구조체나 맵이 포함된 경우 JSON으로 예쁘게 포맷팅
+	for _, arg := range args {
+		if _, ok := arg.(map[string]interface{}); ok {
+			if jsonBytes, err := json.MarshalIndent(arg, "", "  "); err == nil {
+				message = string(jsonBytes)
+			}
+		} else {
+			// 구조체인 경우
+			if jsonBytes, err := json.MarshalIndent(arg, "", "  "); err == nil {
+				message = string(jsonBytes)
+			}
+		}
+	}
+
+	return message
+}
+
 func WebhookLog(format string, args ...interface{}) {
 	webhookURL := os.Getenv("WEBHOOK_URL")
 	if webhookURL == "" {
 		return
 	}
 
-	message := fmt.Sprintf(format, args...)
+	message := formatMessage(format, args...)
 
 	// Discord 웹훅 메시지 구조
 	payload := map[string]interface{}{
-		"content": message,
+		"content": "```json\n" + message + "\n```", // 코드 블록으로 감싸기
 		"embeds": []map[string]interface{}{
 			{
-				"title":       "NDNS-GO 로그 알림",
-				"description": message,
-				"color":       0x00ff00, // 초록색
-				"timestamp":   time.Now().Format(time.RFC3339),
-				"footer": map[string]string{
-					"text": "NDNS-GO Logger",
-				},
+				"title":     "로그 알림",
+				"color":     0x00ff00,
+				"timestamp": time.Now().Format(time.RFC3339),
 			},
 		},
 	}
