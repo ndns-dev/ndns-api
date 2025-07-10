@@ -53,14 +53,19 @@ func (s *AnalyzerService) AnalyzeCycle(state model.OcrQueueState, result model.O
 	if err != nil {
 		return nil, fmt.Errorf("OCR 텍스트 분석 실패: %v", err)
 	}
+
+	// 응답 구조체 생성
 	analyzeJobResponse := responseDto.AnalyzeJobResponse{
 		ReqId:              state.ReqId,
 		JobId:              state.JobId,
 		IsSponsored:        analyzed.IsSponsored,
 		SponsorProbability: analyzed.SponsorProbability,
-		SponsorIndicator:   analyzed.SponsorIndicators[0],
 	}
 
+	// SponsorIndicators가 있는 경우에만 첫 번째 인디케이터 설정
+	if len(analyzed.SponsorIndicators) > 0 {
+		analyzeJobResponse.SponsorIndicator = analyzed.SponsorIndicators[0]
+	}
 	// LastSticker이거나 협찬이 발견된 경우 추가 분석 없이 결과 반환
 	if state.CurrentPosition == model.OcrPositionLastSticker || analyzed.IsSponsored {
 		// 라우터 서버로 분석 결과 전송
@@ -89,7 +94,7 @@ func (s *AnalyzerService) AnalyzeCycle(state model.OcrQueueState, result model.O
 
 		return &analyzeJobResponse, nil
 	}
-	fmt.Printf("[%v] analyzed.IsSponsored false 이므로 다음 OCR 요청 / state.CurrentPosition: %v\n", state.JobId, state.CurrentPosition)
+	fmt.Printf("[jobId: %v] analyzed.IsSponsored false 이므로 다음 OCR 요청 / state.CurrentPosition: %v\n", state.JobId, state.CurrentPosition)
 	// 다음 분석 위치가 있는 경우 SQS에 요청
 	if err := s.detectorService.RequestNextOcr(state); err != nil {
 		return nil, fmt.Errorf("다음 OCR 요청 실패: %v", err)
