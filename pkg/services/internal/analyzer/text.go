@@ -62,8 +62,13 @@ func (s *AnalyzerService) AnalyzeCycle(state model.OcrQueueState, result model.O
 		analyzeJobResponse.SponsorIndicator = analyzed.SponsorIndicators[0]
 	}
 
-	// 협찬이 발견된 경우, 마지막 이미지인 경우 바로 결과 전송
-	if analyzed.IsSponsored || state.CurrentPosition == model.OcrPositionLastSticker {
+	// 바로 결과 전송하는 경우
+	// 협찬이 발견된 경우
+	// 마지막 이미지인 경우 (2025년 이전은 lastSticker, 2025년 이후는 secondSticker)
+	isLastImage := (state.Is2025OrLater && state.CurrentPosition == model.OcrPositionSecondSticker) ||
+		(!state.Is2025OrLater && state.CurrentPosition == model.OcrPositionLastSticker)
+
+	if analyzed.IsSponsored || isLastImage {
 		client.SendAnalysis(&analyzeJobResponse, &state)
 		return &analyzeJobResponse, nil
 	}
