@@ -14,10 +14,10 @@ func NewServiceContainer() *_interface.ServiceContainer {
 	// 1. 기본 서비스 초기화
 	queueService := queue.NewQueueService()
 	ocrRepository := repository.NewOcrRepository()
-
+	analyzedResultRepository := repository.NewAnalyzedResultRepository()
 	// 2. 핵심 서비스 초기화
 	detectorService := detector.NewDetectorService(queueService)
-	analyzerService := analyzer.NewAnalyzerService(detectorService)
+	analyzerService := analyzer.NewAnalyzerService(detectorService, analyzedResultRepository)
 
 	// 3. 의존 서비스 초기화
 	searchService := api.NewSearchService(analyzerService, ocrRepository)

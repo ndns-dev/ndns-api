@@ -11,3 +11,9 @@ type OcrRepository interface {
 	SaveOcrResult(result *model.OcrResult) error
 	GetOcrResult(imageUrl string) (*model.OcrResult, error)
 }
+
+// AnalyzedResultRepository는 분석결과를 관리하는 인터페이스입니다
+type AnalyzedResultRepository interface {
+	GetAnalyzedResult(link string) (*model.AnalyzedResult, error)
+	SaveAnalyzedResult(result *model.AnalyzedResult) error
+}
