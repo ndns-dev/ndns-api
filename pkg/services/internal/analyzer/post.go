@@ -45,8 +45,6 @@ func (s *AnalyzerService) AnalyzePosts(posts []structure.NaverSearchItem, reqId 
 		wg.Add(1)
 		go func(index int, item structure.NaverSearchItem) {
 			defer wg.Done()
-
-			utils.DebugLog("포스트 날짜: %v\n", item.PostDate)
 			is2025OrLater := utils.IsAfter2025(item.PostDate)
 			blogPost := responseDto.AnalyzedResponse{
 				NaverSearchItem:    item,
@@ -126,10 +124,38 @@ func (s *AnalyzerService) AnalyzePosts(posts []structure.NaverSearchItem, reqId 
 					}
 				}
 			}
-
 			mu.Lock()
 			results[index] = blogPost
 			mu.Unlock()
+		}(i, post)
+	}
+
+	wg.Wait()
+	return results, nil
+}
+
+// GetExistingPosts는 기존 분석결과를 조회합니다
+func (s *AnalyzerService) GetExistingPosts(posts []structure.NaverSearchItem) ([]responseDto.AnalyzedResponse, error) {
+	results := make([]responseDto.AnalyzedResponse, len(posts))
+	var wg sync.WaitGroup
+
+	for i, post := range posts {
+		wg.Add(1)
+		go func(index int, item structure.NaverSearchItem) {
+			defer wg.Done()
+			analyzedResult, err := s.analyzedResultRepository.GetAnalyzedResult(item.Link)
+			if err != nil {
+				utils.DebugLog("분석결과 조회 실패: %v\n", err)
+				return
+			}
+			blogPost := responseDto.AnalyzedResponse{
+				NaverSearchItem:    item,
+				IsSponsored:        analyzedResult.IsSponsored,
+				SponsorProbability: analyzedResult.SponsorProbability,
+				SponsorIndicators:  analyzedResult.SponsorIndicators,
+			}
+
+			results[index] = blogPost
 		}(i, post)
 	}
 

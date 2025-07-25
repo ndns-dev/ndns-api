@@ -38,6 +38,8 @@ type AnalyzerService interface {
 	AnalyzeCycle(state model.OcrQueueState, result model.OcrResult) (*responseDto.AnalyzeJobResponse, error)
 	// AnalyzePosts는 블로그 포스트에서 협찬 관련 텍스트를 감지합니다
 	AnalyzePosts(posts []structure.NaverSearchItem, reqId string) ([]responseDto.AnalyzedResponse, error)
+	// GetExistingPosts는 기존 분석결과를 조회합니다
+	GetExistingPosts(posts []structure.NaverSearchItem) ([]responseDto.AnalyzedResponse, error)
 }
 
 // CrawlerService는 블로그 콘텐츠를 크롤링하는 인터페이스입니다
