@@ -8,10 +8,9 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	client "github.com/sh5080/ndns-go/pkg/clients"
 	"github.com/sh5080/ndns-go/pkg/configs"
 	_interface "github.com/sh5080/ndns-go/pkg/interfaces"
 	model "github.com/sh5080/ndns-go/pkg/types/models"
@@ -32,22 +31,12 @@ type OcrRepositoryImpl struct {
 // NewOcrRepository는 새 Ocr 저장소를 생성합니다
 func NewOcrRepository() _interface.OcrRepository {
 	config := configs.GetConfig()
-	// AWS 설정
-	cfg, _ := awsconfig.LoadDefaultConfig(context.TODO(),
-		awsconfig.WithRegion(config.AWS.Region),
-		awsconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-			config.AWS.AccessKeyId,
-			config.AWS.SecretAccessKey,
-			"",
-		)),
-	)
 
-	// DynamoDB 클라이언트 생성
-	client := dynamodb.NewFromConfig(cfg, func(o *dynamodb.Options) {
-		if config.AWS.DynamoDBEndpoint != "" {
-			o.EndpointResolver = dynamodb.EndpointResolverFromURL(config.AWS.DynamoDBEndpoint)
-		}
-	})
+	// 공통 DynamoDB 클라이언트 생성
+	client, err := client.NewDynamoDBClient()
+	if err != nil {
+		return nil
+	}
 
 	repo := &OcrRepositoryImpl{
 		client:    client,
