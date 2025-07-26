@@ -26,12 +26,7 @@ func NewDynamoDBClient() (*dynamodb.Client, error) {
 		return nil, err
 	}
 
-	// DynamoDB 클라이언트 생성
-	client := dynamodb.NewFromConfig(cfg, func(o *dynamodb.Options) {
-		if config.AWS.DynamoDBEndpoint != "" {
-			o.EndpointResolver = dynamodb.EndpointResolverFromURL(config.AWS.DynamoDBEndpoint)
-		}
-	})
+	client := dynamodb.NewFromConfig(cfg)
 
 	return client, nil
 }

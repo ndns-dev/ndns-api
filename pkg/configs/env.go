@@ -27,9 +27,9 @@ type EnvConfig struct {
 		Region           string `env:"AWS_REGION,required"`
 		DynamoDBEndpoint string `env:"AWS_DYNAMODB_ENDPOINT" envDefault:""`
 		Tables           struct {
-			OcrResult      string `env:"AWS_TABLES_OCR_RESULT" envDefault:"ocrResult"`
-			OcrQueueState  string `env:"AWS_TABLES_OCR_QUEUE_STATE" envDefault:"ocrQueueState"`
-			AnalyzedResult string `env:"AWS_TABLES_ANALYZED_RESULT" envDefault:"analyzedResult"`
+			OcrResult      string `env:"AWS_TABLES_OCR_RESULT" envDefault:"OcrResult"`
+			OcrQueueState  string `env:"AWS_TABLES_OCR_QUEUE_STATE" envDefault:"OcrQueueState"`
+			AnalyzedResult string `env:"AWS_TABLES_ANALYZED_RESULT" envDefault:"AnalyzedResult"`
 		}
 		SQS struct {
 			QueueUrl string `env:"AWS_SQS_QUEUE_URL,required"`
