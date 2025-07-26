@@ -20,7 +20,7 @@ func NewServiceContainer() *_interface.ServiceContainer {
 	analyzerService := analyzer.NewAnalyzerService(detectorService, analyzedResultRepository)
 
 	// 3. 의존 서비스 초기화
-	searchService := api.NewSearchService(analyzerService, ocrRepository)
+	searchService := api.NewSearchService(analyzerService, ocrRepository, analyzedResultRepository)
 
 	return &_interface.ServiceContainer{
 		SearchService:   searchService,

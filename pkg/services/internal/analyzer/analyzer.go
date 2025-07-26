@@ -15,7 +15,8 @@ type AnalyzerService struct {
 // NewAnalyzerService는 새로운 AnalyzerService를 생성합니다
 func NewAnalyzerService(detectorService _interface.DetectorService, analyzedResultRepository _interface.AnalyzedResultRepository) _interface.AnalyzerService {
 	return &AnalyzerService{
-		config:          configs.GetConfig(),
-		detectorService: detectorService,
+		config:                   configs.GetConfig(),
+		detectorService:          detectorService,
+		analyzedResultRepository: analyzedResultRepository,
 	}
 }
