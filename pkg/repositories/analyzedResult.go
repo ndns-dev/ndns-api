@@ -67,6 +67,47 @@ func (r *AnalyzedResultRepositoryImpl) GetAnalyzedResult(link string) (*model.An
 	return &analyzedResult, nil
 }
 
+// GetAnalyzedResults는 여러 링크의 분석결과를 한 번에 조회합니다
+func (r *AnalyzedResultRepositoryImpl) GetAnalyzedResults(links []string) (map[string]*model.AnalyzedResult, error) {
+	if len(links) == 0 {
+		return make(map[string]*model.AnalyzedResult), nil
+	}
+
+	// DynamoDB BatchGetItem 요청을 위한 키 생성
+	keys := make([]map[string]types.AttributeValue, len(links))
+	for i, link := range links {
+		keys[i] = map[string]types.AttributeValue{
+			"Link": &types.AttributeValueMemberS{Value: link},
+		}
+	}
+	// BatchGetItem 요청
+	result, err := r.client.BatchGetItem(context.TODO(), &dynamodb.BatchGetItemInput{
+		RequestItems: map[string]types.KeysAndAttributes{
+			r.tableName: {
+				Keys: keys,
+			},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// 결과 매핑
+	analyzedResults := make(map[string]*model.AnalyzedResult)
+	if responses, exists := result.Responses[r.tableName]; exists {
+		for _, item := range responses {
+			var analyzedResult model.AnalyzedResult
+			err := attributevalue.UnmarshalMap(item, &analyzedResult)
+			if err != nil {
+				continue // 개별 아이템 파싱 실패는 무시하고 계속 진행
+			}
+			analyzedResults[analyzedResult.Link] = &analyzedResult
+		}
+	}
+
+	return analyzedResults, nil
+}
+
 // SaveAnalyzedResult는 분석결과를 DynamoDB에 저장합니다
 func (r *AnalyzedResultRepositoryImpl) SaveAnalyzedResult(result *model.AnalyzedResult) error {
 	// SponsorIndicators를 JSON으로 직렬화
@@ -82,5 +123,51 @@ func (r *AnalyzedResultRepositoryImpl) SaveAnalyzedResult(result *model.Analyzed
 			"SponsorIndicators":  &types.AttributeValueMemberS{Value: string(indicatorsJSON)},
 		},
 	})
+	return nil
+}
+
+// SaveAnalyzedResults는 여러 분석결과를 한 번에 저장합니다
+func (r *AnalyzedResultRepositoryImpl) SaveAnalyzedResults(results []*model.AnalyzedResult) error {
+	if len(results) == 0 {
+		return nil
+	}
+
+	// BatchWriteItem 요청을 위한 아이템 생성
+	writeRequests := make([]types.WriteRequest, len(results))
+	for i, result := range results {
+		// SponsorIndicators를 JSON으로 직렬화
+		indicatorsJSON, _ := json.Marshal(result.SponsorIndicators)
+
+		writeRequests[i] = types.WriteRequest{
+			PutRequest: &types.PutRequest{
+				Item: map[string]types.AttributeValue{
+					"Link":               &types.AttributeValueMemberS{Value: result.Link},
+					"IsSponsored":        &types.AttributeValueMemberS{Value: strconv.FormatBool(result.IsSponsored)},
+					"SponsorProbability": &types.AttributeValueMemberS{Value: strconv.FormatFloat(result.SponsorProbability, 'f', -1, 64)},
+					"SponsorIndicators":  &types.AttributeValueMemberS{Value: string(indicatorsJSON)},
+				},
+			},
+		}
+	}
+
+	// BatchWriteItem 요청 (DynamoDB는 한 번에 최대 25개 아이템 처리)
+	batchSize := 25
+	for i := 0; i < len(writeRequests); i += batchSize {
+		end := i + batchSize
+		if end > len(writeRequests) {
+			end = len(writeRequests)
+		}
+
+		batch := writeRequests[i:end]
+		_, err := r.client.BatchWriteItem(context.TODO(), &dynamodb.BatchWriteItemInput{
+			RequestItems: map[string][]types.WriteRequest{
+				r.tableName: batch,
+			},
+		})
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }

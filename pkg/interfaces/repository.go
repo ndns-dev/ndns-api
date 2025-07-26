@@ -15,5 +15,7 @@ type OcrRepository interface {
 // AnalyzedResultRepository는 분석결과를 관리하는 인터페이스입니다
 type AnalyzedResultRepository interface {
 	GetAnalyzedResult(link string) (*model.AnalyzedResult, error)
+	GetAnalyzedResults(links []string) (map[string]*model.AnalyzedResult, error)
 	SaveAnalyzedResult(result *model.AnalyzedResult) error
+	SaveAnalyzedResults(results []*model.AnalyzedResult) error
 }
