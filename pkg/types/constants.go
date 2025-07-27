@@ -19,6 +19,7 @@ var SPONSOR_DOMAINS = []string{
 	"ringble",
 	"강남맛집",
 	"모두모여",
+	"mrble1",
 }
 
 // 네이버 이미지 패턴
