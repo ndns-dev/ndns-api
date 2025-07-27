@@ -10,26 +10,29 @@ import (
 	responseDto "github.com/sh5080/ndns-go/pkg/types/dtos/responses"
 	model "github.com/sh5080/ndns-go/pkg/types/models"
 	structure "github.com/sh5080/ndns-go/pkg/types/structures"
+	"github.com/sh5080/ndns-go/pkg/utils"
 )
 
 // SearchImpl는 검색 서비스 구현체입니다
 type SearchImpl struct {
 	_interface.Service
-	naverClient     *naver.NaverAPIClient
-	analyzerService _interface.AnalyzerService
-	ocrRepository   _interface.OcrRepository
+	naverClient              *naver.NaverAPIClient
+	analyzerService          _interface.AnalyzerService
+	ocrRepository            _interface.OcrRepository
+	analyzedResultRepository _interface.AnalyzedResultRepository
 }
 
 // NewSearchService는 새 검색 서비스를 생성합니다
-func NewSearchService(analyzerService _interface.AnalyzerService, ocrRepository _interface.OcrRepository) _interface.SearchService {
+func NewSearchService(analyzerService _interface.AnalyzerService, ocrRepository _interface.OcrRepository, analyzedResultRepository _interface.AnalyzedResultRepository) _interface.SearchService {
 	config := configs.GetConfig()
 	naverClient := naver.NewNaverAPIClient(config)
 
 	return &SearchImpl{
-		Service:         _interface.Service{Config: config},
-		naverClient:     naverClient,
-		analyzerService: analyzerService,
-		ocrRepository:   ocrRepository,
+		Service:                  _interface.Service{Config: config},
+		naverClient:              naverClient,
+		analyzerService:          analyzerService,
+		ocrRepository:            ocrRepository,
+		analyzedResultRepository: analyzedResultRepository,
 	}
 }
 
@@ -78,8 +81,61 @@ func (s *SearchImpl) SearchAnalyzedResponses(req requestDto.SearchQuery, reqId s
 	// 기존 분석결과와 새로 분석한 결과를 합쳐서 반환
 	allPosts := append(existingPosts, newPosts...)
 
+	// newPosts를 백그라운드에서 저장 (goroutine)
+	if len(newPosts) > 0 {
+		go func() {
+			// IsSponsored가 true인 결과만 필터링
+			sponsoredResults := make([]*model.AnalyzedResult, 0)
+			for _, post := range newPosts {
+				if post.IsSponsored {
+					sponsoredResults = append(sponsoredResults, &model.AnalyzedResult{
+						Link:               post.Link,
+						IsSponsored:        post.IsSponsored,
+						SponsorProbability: post.SponsorProbability,
+						SponsorIndicators:  post.SponsorIndicators,
+					})
+				}
+			}
+
+			// 협찬이 확인된 결과만 배치 저장
+			if len(sponsoredResults) > 0 {
+				if err := s.analyzedResultRepository.SaveAnalyzedResults(sponsoredResults); err != nil {
+					utils.DebugLog("백그라운드 저장 실패: %v\n", err)
+				} else {
+					utils.DebugLog("백그라운드 저장 완료: %d개 (협찬 확인)\n", len(sponsoredResults))
+				}
+			} else {
+				utils.DebugLog("저장할 협찬 결과 없음\n")
+			}
+		}()
+	}
+
 	// 네이버 API에서 반환한 총 결과 수 반환
 	return allPosts, searchResp.Total, nil
+}
+
+// SaveAnalyzeCycleResult는 AnalyzeCycle의 최종 결과를 저장합니다
+func (s *SearchImpl) SaveAnalyzeCycleResult(response *responseDto.AnalyzeJobResponse, state model.OcrQueueState) {
+	// 최종 결과를 DynamoDB에 저장
+	go func() {
+		result := &model.AnalyzedResult{
+			Link:               state.CrawlResult.Url,
+			IsSponsored:        response.IsSponsored,
+			SponsorProbability: response.SponsorProbability,
+			SponsorIndicators:  []structure.SponsorIndicator{},
+		}
+
+		// SponsorIndicator가 있으면 추가
+		if response.SponsorIndicator.Type != "" {
+			result.SponsorIndicators = append(result.SponsorIndicators, response.SponsorIndicator)
+		}
+
+		if err := s.analyzedResultRepository.SaveAnalyzedResult(result); err != nil {
+			utils.DebugLog("최종 결과 저장 실패: %v\n", err)
+		} else {
+			utils.DebugLog("최종 결과 저장 완료: %s\n", result.Link)
+		}
+	}()
 }
 
 // 현재 진행중인 작업 조회

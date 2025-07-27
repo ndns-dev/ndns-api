@@ -9,6 +9,6 @@ import (
 // SetupSearchRoutes는 검색 관련 라우트를 설정합니다
 func SetupSearchRoutes(endpoint string, api fiber.Router, services *_interface.ServiceContainer) {
 	api.Get(endpoint, controller.Search(services.SearchService))
-	api.Post(endpoint+"/analyze/cycle", controller.AnalyzeCycle(services.AnalyzerService, services.DetectorService))
+	api.Post(endpoint+"/analyze/cycle", controller.AnalyzeCycle(services.AnalyzerService, services.DetectorService, services.SearchService))
 	api.Post(endpoint+"/analyze/job/:jobId", controller.AnalyzePostByJobId(services.SearchService, services.AnalyzerService))
 }
