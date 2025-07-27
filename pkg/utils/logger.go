@@ -177,10 +177,10 @@ func WebhookLog(format string, args ...interface{}) {
 
 	// Discord 웹훅 메시지 구조
 	payload := map[string]interface{}{
-		"content": "```json\n" + message + "\n```", // 코드 블록으로 감싸기
+		"content": "```json\n" + message + "\n```",
 		"embeds": []map[string]interface{}{
 			{
-				"title":     "로그 알림",
+				"title":     format,
 				"color":     0x00ff00,
 				"timestamp": time.Now().Format(time.RFC3339),
 			},
