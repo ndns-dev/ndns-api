@@ -115,11 +115,11 @@ func (s *AnalyzerService) AnalyzePosts(posts []structure.NaverSearchItem, reqId 
 							Is2025OrLater:   is2025OrLater,
 						}
 
-						utils.WebhookLog("Ocr 요청 시작: %+v\n", state)
-						// 첫 번째 Ocr 요청
+						utils.WebhookLog("[ndns-go]OCR 요청 시작: %+v\n", state)
+						// 첫 번째 OCR 요청
 						err := s.detectorService.RequestNextOcr(state)
 						if err != nil {
-							utils.DebugLog("Ocr 요청 실패: %v\n", err)
+							utils.DebugLog("[ndns-go]OCR 요청 실패: %v\n", err)
 						}
 					}
 				}

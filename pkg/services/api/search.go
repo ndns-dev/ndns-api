@@ -54,6 +54,7 @@ func (s *SearchImpl) SearchAnalyzedResponses(req requestDto.SearchQuery, reqId s
 	if err != nil {
 		return nil, 0, fmt.Errorf("기존 분석결과 확인 실패: %v", err)
 	}
+	utils.DebugLog("[GetExistingPosts]기존 분석결과 확인 완료: %v개\n", existingPosts)
 
 	// 기존 분석결과와 비교하여 existingPosts에 없는 것만 AnalyzePosts 통해 분석
 	analyzePosts := make([]structure.NaverSearchItem, 0)
