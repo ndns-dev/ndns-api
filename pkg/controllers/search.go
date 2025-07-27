@@ -54,19 +54,24 @@ func Search(searchService _interface.SearchService) fiber.Handler {
 }
 
 // AnalyzeCycle은 OCR 결과를 분석하고 다음 OCR 요청 여부를 결정하는 핸들러입니다
-func AnalyzeCycle(analyzerService _interface.AnalyzerService, detectorService _interface.DetectorService) fiber.Handler {
+func AnalyzeCycle(analyzerService _interface.AnalyzerService, detectorService _interface.DetectorService, searchService _interface.SearchService) fiber.Handler {
 	return func(ctx *fiber.Ctx) error {
 		var req requestDto.AnalyzeCycleParam
 		if err := ctx.BodyParser(&req); err != nil {
 			return utils.AppError(ctx, fiber.StatusBadRequest, err, "JSON 파싱 실패")
 		}
 		// OCR 결과 처리 및 다음 OCR 요청
-		response, err := analyzerService.AnalyzeCycle(req.State, req.Result)
+		response, isFinal, err := analyzerService.AnalyzeCycle(req.State, req.Result)
 		if err != nil {
 			fmt.Printf("OCR 처리 실패: %v", err)
 			return utils.AppError(ctx, fiber.StatusBadRequest, err, "OCR 처리 실패")
 		}
-		utils.Info("AnalyzeCycle", "lambda에서 받은 AnalyzeCycle Response 전체 정보 ===\n%+v\n==============\n", response)
+		utils.Info("AnalyzeCycle", "lambda에서 받은 AnalyzeCycle Response 전체 정보 ===\n%+v\n최종결과: %v\n==============\n", response, isFinal)
+
+		// 최종 결과일 때만 저장
+		if isFinal {
+			searchService.SaveAnalyzeCycleResult(response, req.State)
+		}
 
 		return ctx.JSON(response)
 	}
@@ -83,7 +88,7 @@ func AnalyzePostByJobId(searchService _interface.SearchService, analyzerService 
 			return utils.AppError(ctx, fiber.StatusNotFound, err, "OCR 처리 실패")
 		}
 
-		response, err := analyzerService.AnalyzeCycle(job, result)
+		response, _, err := analyzerService.AnalyzeCycle(job, result)
 		if err != nil {
 			fmt.Printf("OCR 처리 실패: %v", err)
 			return utils.AppError(ctx, fiber.StatusBadRequest, err, "OCR 처리 실패")

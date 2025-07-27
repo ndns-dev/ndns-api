@@ -42,11 +42,11 @@ func (s *AnalyzerService) AnalyzeText(text string) (*responseDto.AnalyzedRespons
 }
 
 // AnalyzeCycle은 OCR 결과를 분석하고 다음 OCR 요청 여부를 결정합니다
-func (s *AnalyzerService) AnalyzeCycle(state model.OcrQueueState, result model.OcrResult) (*responseDto.AnalyzeJobResponse, error) {
+func (s *AnalyzerService) AnalyzeCycle(state model.OcrQueueState, result model.OcrResult) (*responseDto.AnalyzeJobResponse, bool, error) {
 	// OCR 텍스트 분석
 	analyzed, err := s.AnalyzeText(result.OcrText)
 	if err != nil {
-		return nil, fmt.Errorf("OCR 텍스트 분석 실패: %v", err)
+		return nil, false, fmt.Errorf("OCR 텍스트 분석 실패: %v", err)
 	}
 
 	// 응답 구조체 생성
@@ -70,13 +70,13 @@ func (s *AnalyzerService) AnalyzeCycle(state model.OcrQueueState, result model.O
 
 	if analyzed.IsSponsored || isLastImage {
 		client.SendAnalysis(&analyzeJobResponse, &state)
-		return &analyzeJobResponse, nil
+		return &analyzeJobResponse, true, nil // 최종 결과
 	}
 
 	// 다음 이미지 분석 시도
 	if err := s.detectorService.RequestNextOcr(state); err != nil {
 		if err.Error() != "finished" {
-			return nil, fmt.Errorf("다음 OCR 요청 실패: %v", err)
+			return nil, false, fmt.Errorf("다음 OCR 요청 실패: %v", err)
 		}
 		// 더 이상 분석할 이미지가 없는 경우는 협찬이 아닌 것으로 판단
 		utils.Info("AnalyzerService", "분석 완료 - 협찬 아님 (더 이상 분석할 이미지 없음): JobId=%s", state.JobId)
@@ -84,8 +84,8 @@ func (s *AnalyzerService) AnalyzeCycle(state model.OcrQueueState, result model.O
 		analyzeJobResponse.SponsorProbability = 0
 		analyzeJobResponse.SponsorIndicator = detector.CreateNonSponsoredIndicator(state.JobId)
 		client.SendAnalysis(&analyzeJobResponse, &state)
-		return &analyzeJobResponse, nil
+		return &analyzeJobResponse, true, nil // 최종 결과
 	}
 
-	return &analyzeJobResponse, nil
+	return &analyzeJobResponse, false, nil // 중간 결과
 }
