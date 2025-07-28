@@ -13,6 +13,7 @@ import (
 	"github.com/sh5080/ndns-go/pkg/configs"
 	_interface "github.com/sh5080/ndns-go/pkg/interfaces"
 	model "github.com/sh5080/ndns-go/pkg/types/models"
+	"github.com/sh5080/ndns-go/pkg/utils"
 )
 
 // OcrRepositoryImpl는 Ocr 작업 상태를 관리하는 리포지토리입니다
@@ -73,6 +74,8 @@ func (r *AnalyzedResultRepositoryImpl) GetAnalyzedResults(links []string) (map[s
 		return make(map[string]*model.AnalyzedResult), nil
 	}
 
+	utils.DebugLog("GetAnalyzedResults 시작: %d개 링크 조회\n", len(links))
+
 	// DynamoDB BatchGetItem 요청을 위한 키 생성
 	keys := make([]map[string]types.AttributeValue, len(links))
 	for i, link := range links {
@@ -80,6 +83,8 @@ func (r *AnalyzedResultRepositoryImpl) GetAnalyzedResults(links []string) (map[s
 			"Link": &types.AttributeValueMemberS{Value: link},
 		}
 	}
+
+	utils.DebugLog("DynamoDB BatchGetItem 요청 시작\n")
 	// BatchGetItem 요청
 	result, err := r.client.BatchGetItem(context.TODO(), &dynamodb.BatchGetItemInput{
 		RequestItems: map[string]types.KeysAndAttributes{
@@ -89,22 +94,30 @@ func (r *AnalyzedResultRepositoryImpl) GetAnalyzedResults(links []string) (map[s
 		},
 	})
 	if err != nil {
+		utils.DebugLog("BatchGetItem 실패: %v\n", err)
 		return nil, err
 	}
 
+	utils.DebugLog("BatchGetItem 응답 받음\n")
 	// 결과 매핑
 	analyzedResults := make(map[string]*model.AnalyzedResult)
 	if responses, exists := result.Responses[r.tableName]; exists {
+		utils.DebugLog("테이블 %s에서 %d개 아이템 조회됨\n", r.tableName, len(responses))
 		for _, item := range responses {
 			var analyzedResult model.AnalyzedResult
 			err := attributevalue.UnmarshalMap(item, &analyzedResult)
 			if err != nil {
+				utils.DebugLog("아이템 파싱 실패: %v\n", err)
 				continue // 개별 아이템 파싱 실패는 무시하고 계속 진행
 			}
 			analyzedResults[analyzedResult.Link] = &analyzedResult
+			utils.DebugLog("파싱된 결과: %s -> IsSponsored: %v\n", analyzedResult.Link, analyzedResult.IsSponsored)
 		}
+	} else {
+		utils.DebugLog("테이블 %s에서 응답 없음\n", r.tableName)
 	}
 
+	utils.DebugLog("GetAnalyzedResults 완료: %d개 결과 반환\n", len(analyzedResults))
 	return analyzedResults, nil
 }
 

@@ -54,7 +54,7 @@ func (s *SearchImpl) SearchAnalyzedResponses(req requestDto.SearchQuery, reqId s
 	if err != nil {
 		return nil, 0, fmt.Errorf("기존 분석결과 확인 실패: %v", err)
 	}
-	utils.DebugLog("[GetExistingPosts]기존 분석결과 확인 완료: %v개\n", existingPosts)
+	utils.DebugLog("[GetExistingPosts]기존 분석결과 확인 완료: %v\n", existingPosts)
 
 	// 기존 분석결과와 비교하여 existingPosts에 없는 것만 AnalyzePosts 통해 분석
 	analyzePosts := make([]structure.NaverSearchItem, 0)
@@ -84,6 +84,7 @@ func (s *SearchImpl) SearchAnalyzedResponses(req requestDto.SearchQuery, reqId s
 
 	// newPosts를 백그라운드에서 저장 (goroutine)
 	if len(newPosts) > 0 {
+		utils.DebugLog("백그라운드 저장 시작: %d개 포스트\n", len(newPosts))
 		go func() {
 			// IsSponsored가 true인 결과만 필터링
 			sponsoredResults := make([]*model.AnalyzedResult, 0)
@@ -96,6 +97,11 @@ func (s *SearchImpl) SearchAnalyzedResponses(req requestDto.SearchQuery, reqId s
 						SponsorIndicators:  post.SponsorIndicators,
 					})
 				}
+			}
+
+			utils.DebugLog("협찬 확인된 포스트: %d개\n", len(sponsoredResults))
+			for _, result := range sponsoredResults {
+				utils.DebugLog("저장할 링크: %s\n", result.Link)
 			}
 
 			// 협찬이 확인된 결과만 배치 저장
