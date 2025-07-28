@@ -6,13 +6,13 @@ import (
 	"strconv"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	client "github.com/sh5080/ndns-go/pkg/clients"
 	"github.com/sh5080/ndns-go/pkg/configs"
 	_interface "github.com/sh5080/ndns-go/pkg/interfaces"
 	model "github.com/sh5080/ndns-go/pkg/types/models"
+	structure "github.com/sh5080/ndns-go/pkg/types/structures"
 	"github.com/sh5080/ndns-go/pkg/utils"
 )
 
@@ -42,12 +42,14 @@ func NewAnalyzedResultRepository() _interface.AnalyzedResultRepository {
 
 	return repo
 }
+
+// GetAnalyzedResult는 링크에 대한 분석결과를 조회합니다
 func (r *AnalyzedResultRepositoryImpl) GetAnalyzedResult(link string) (*model.AnalyzedResult, error) {
 	// DynamoDB에서 분석결과 조회
 	result, err := r.client.GetItem(context.TODO(), &dynamodb.GetItemInput{
 		TableName: aws.String(r.tableName),
 		Key: map[string]types.AttributeValue{
-			"Link": &types.AttributeValueMemberS{Value: link},
+			"link": &types.AttributeValueMemberS{Value: link},
 		},
 	})
 	if err != nil {
@@ -59,13 +61,32 @@ func (r *AnalyzedResultRepositoryImpl) GetAnalyzedResult(link string) (*model.An
 		return nil, nil
 	}
 
-	// 조회된 결과를 AnalyzedResponse로 변환
-	var analyzedResult model.AnalyzedResult
-	err = attributevalue.UnmarshalMap(result.Item, &analyzedResult)
-	if err != nil {
-		return nil, err
+	// 기본 필드들 파싱
+	analyzedResult := &model.AnalyzedResult{
+		Link: link,
 	}
-	return &analyzedResult, nil
+
+	// IsSponsored 파싱
+	if isSponsoredVal, ok := result.Item["isSponsored"].(*types.AttributeValueMemberBOOL); ok {
+		analyzedResult.IsSponsored = isSponsoredVal.Value
+	}
+
+	// SponsorProbability 파싱
+	if probVal, ok := result.Item["sponsorProbability"].(*types.AttributeValueMemberN); ok {
+		if prob, err := strconv.ParseFloat(probVal.Value, 64); err == nil {
+			analyzedResult.SponsorProbability = prob
+		}
+	}
+
+	// SponsorIndicators 파싱 (JSON 문자열에서)
+	if indicatorsVal, ok := result.Item["sponsorIndicators"].(*types.AttributeValueMemberS); ok {
+		var indicators []structure.SponsorIndicator
+		if err := json.Unmarshal([]byte(indicatorsVal.Value), &indicators); err == nil {
+			analyzedResult.SponsorIndicators = indicators
+		}
+	}
+
+	return analyzedResult, nil
 }
 
 // GetAnalyzedResults는 여러 링크의 분석결과를 한 번에 조회합니다
@@ -80,7 +101,7 @@ func (r *AnalyzedResultRepositoryImpl) GetAnalyzedResults(links []string) (map[s
 	keys := make([]map[string]types.AttributeValue, len(links))
 	for i, link := range links {
 		keys[i] = map[string]types.AttributeValue{
-			"Link": &types.AttributeValueMemberS{Value: link},
+			"link": &types.AttributeValueMemberS{Value: link},
 		}
 	}
 
@@ -88,9 +109,7 @@ func (r *AnalyzedResultRepositoryImpl) GetAnalyzedResults(links []string) (map[s
 	// BatchGetItem 요청
 	result, err := r.client.BatchGetItem(context.TODO(), &dynamodb.BatchGetItemInput{
 		RequestItems: map[string]types.KeysAndAttributes{
-			r.tableName: {
-				Keys: keys,
-			},
+			r.tableName: {Keys: keys},
 		},
 	})
 	if err != nil {
@@ -104,13 +123,37 @@ func (r *AnalyzedResultRepositoryImpl) GetAnalyzedResults(links []string) (map[s
 	if responses, exists := result.Responses[r.tableName]; exists {
 		utils.DebugLog("테이블 %s에서 %d개 아이템 조회됨\n", r.tableName, len(responses))
 		for _, item := range responses {
-			var analyzedResult model.AnalyzedResult
-			err := attributevalue.UnmarshalMap(item, &analyzedResult)
-			if err != nil {
-				utils.DebugLog("아이템 파싱 실패: %v\n", err)
-				continue // 개별 아이템 파싱 실패는 무시하고 계속 진행
+			// 기본 필드들 파싱
+			analyzedResult := &model.AnalyzedResult{}
+
+			// Link 파싱
+			if linkVal, ok := item["link"].(*types.AttributeValueMemberS); ok {
+				analyzedResult.Link = linkVal.Value
 			}
-			analyzedResults[analyzedResult.Link] = &analyzedResult
+
+			// IsSponsored 파싱
+			if isSponsoredVal, ok := item["isSponsored"].(*types.AttributeValueMemberBOOL); ok {
+				analyzedResult.IsSponsored = isSponsoredVal.Value
+			}
+
+			// SponsorProbability 파싱
+			if probVal, ok := item["sponsorProbability"].(*types.AttributeValueMemberN); ok {
+				if prob, err := strconv.ParseFloat(probVal.Value, 64); err == nil {
+					analyzedResult.SponsorProbability = prob
+				}
+			}
+
+			// SponsorIndicators 파싱 (JSON 문자열에서)
+			if indicatorsVal, ok := item["sponsorIndicators"].(*types.AttributeValueMemberS); ok {
+				var indicators []structure.SponsorIndicator
+				if err := json.Unmarshal([]byte(indicatorsVal.Value), &indicators); err == nil {
+					analyzedResult.SponsorIndicators = indicators
+				} else {
+					utils.DebugLog("SponsorIndicators JSON 파싱 실패: %v\n", err)
+				}
+			}
+
+			analyzedResults[analyzedResult.Link] = analyzedResult
 			utils.DebugLog("파싱된 결과: %s -> IsSponsored: %v\n", analyzedResult.Link, analyzedResult.IsSponsored)
 		}
 	} else {
@@ -130,10 +173,10 @@ func (r *AnalyzedResultRepositoryImpl) SaveAnalyzedResult(result *model.Analyzed
 	r.client.PutItem(context.TODO(), &dynamodb.PutItemInput{
 		TableName: aws.String(r.tableName),
 		Item: map[string]types.AttributeValue{
-			"Link":               &types.AttributeValueMemberS{Value: result.Link},
-			"IsSponsored":        &types.AttributeValueMemberS{Value: strconv.FormatBool(result.IsSponsored)},
-			"SponsorProbability": &types.AttributeValueMemberS{Value: strconv.FormatFloat(result.SponsorProbability, 'f', -1, 64)},
-			"SponsorIndicators":  &types.AttributeValueMemberS{Value: string(indicatorsJSON)},
+			"link":               &types.AttributeValueMemberS{Value: result.Link},
+			"isSponsored":        &types.AttributeValueMemberBOOL{Value: result.IsSponsored},
+			"sponsorProbability": &types.AttributeValueMemberN{Value: strconv.FormatFloat(result.SponsorProbability, 'f', -1, 64)},
+			"sponsorIndicators":  &types.AttributeValueMemberS{Value: string(indicatorsJSON)},
 		},
 	})
 	return nil
@@ -154,10 +197,10 @@ func (r *AnalyzedResultRepositoryImpl) SaveAnalyzedResults(results []*model.Anal
 		writeRequests[i] = types.WriteRequest{
 			PutRequest: &types.PutRequest{
 				Item: map[string]types.AttributeValue{
-					"Link":               &types.AttributeValueMemberS{Value: result.Link},
-					"IsSponsored":        &types.AttributeValueMemberS{Value: strconv.FormatBool(result.IsSponsored)},
-					"SponsorProbability": &types.AttributeValueMemberS{Value: strconv.FormatFloat(result.SponsorProbability, 'f', -1, 64)},
-					"SponsorIndicators":  &types.AttributeValueMemberS{Value: string(indicatorsJSON)},
+					"link":               &types.AttributeValueMemberS{Value: result.Link},
+					"isSponsored":        &types.AttributeValueMemberBOOL{Value: result.IsSponsored},
+					"sponsorProbability": &types.AttributeValueMemberN{Value: strconv.FormatFloat(result.SponsorProbability, 'f', -1, 64)},
+					"sponsorIndicators":  &types.AttributeValueMemberS{Value: string(indicatorsJSON)},
 				},
 			},
 		}
