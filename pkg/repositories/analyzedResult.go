@@ -61,17 +61,13 @@ func (r *AnalyzedResultRepositoryImpl) GetAnalyzedResult(link string) (*model.An
 		return nil, nil
 	}
 
-	// 기본 필드들 파싱
 	analyzedResult := &model.AnalyzedResult{
 		Link: link,
 	}
 
-	// IsSponsored 파싱
 	if isSponsoredVal, ok := result.Item["isSponsored"].(*types.AttributeValueMemberBOOL); ok {
 		analyzedResult.IsSponsored = isSponsoredVal.Value
 	}
-
-	// SponsorProbability 파싱
 	if probVal, ok := result.Item["sponsorProbability"].(*types.AttributeValueMemberN); ok {
 		if prob, err := strconv.ParseFloat(probVal.Value, 64); err == nil {
 			analyzedResult.SponsorProbability = prob
@@ -95,9 +91,6 @@ func (r *AnalyzedResultRepositoryImpl) GetAnalyzedResults(links []string) (map[s
 		return make(map[string]*model.AnalyzedResult), nil
 	}
 
-	utils.DebugLog("GetAnalyzedResults 시작: %d개 링크 조회\n", len(links))
-
-	// DynamoDB BatchGetItem 요청을 위한 키 생성
 	keys := make([]map[string]types.AttributeValue, len(links))
 	for i, link := range links {
 		keys[i] = map[string]types.AttributeValue{
@@ -105,8 +98,6 @@ func (r *AnalyzedResultRepositoryImpl) GetAnalyzedResults(links []string) (map[s
 		}
 	}
 
-	utils.DebugLog("DynamoDB BatchGetItem 요청 시작\n")
-	// BatchGetItem 요청
 	result, err := r.client.BatchGetItem(context.TODO(), &dynamodb.BatchGetItemInput{
 		RequestItems: map[string]types.KeysAndAttributes{
 			r.tableName: {Keys: keys},
@@ -117,32 +108,23 @@ func (r *AnalyzedResultRepositoryImpl) GetAnalyzedResults(links []string) (map[s
 		return nil, err
 	}
 
-	utils.DebugLog("BatchGetItem 응답 받음\n")
 	// 결과 매핑
 	analyzedResults := make(map[string]*model.AnalyzedResult)
 	if responses, exists := result.Responses[r.tableName]; exists {
-		utils.DebugLog("테이블 %s에서 %d개 아이템 조회됨\n", r.tableName, len(responses))
 		for _, item := range responses {
-			// 기본 필드들 파싱
 			analyzedResult := &model.AnalyzedResult{}
 
-			// Link 파싱
 			if linkVal, ok := item["link"].(*types.AttributeValueMemberS); ok {
 				analyzedResult.Link = linkVal.Value
 			}
-
-			// IsSponsored 파싱
 			if isSponsoredVal, ok := item["isSponsored"].(*types.AttributeValueMemberBOOL); ok {
 				analyzedResult.IsSponsored = isSponsoredVal.Value
 			}
-
-			// SponsorProbability 파싱
 			if probVal, ok := item["sponsorProbability"].(*types.AttributeValueMemberN); ok {
 				if prob, err := strconv.ParseFloat(probVal.Value, 64); err == nil {
 					analyzedResult.SponsorProbability = prob
 				}
 			}
-
 			// SponsorIndicators 파싱 (JSON 문자열에서)
 			if indicatorsVal, ok := item["sponsorIndicators"].(*types.AttributeValueMemberS); ok {
 				var indicators []structure.SponsorIndicator
@@ -154,7 +136,6 @@ func (r *AnalyzedResultRepositoryImpl) GetAnalyzedResults(links []string) (map[s
 			}
 
 			analyzedResults[analyzedResult.Link] = analyzedResult
-			utils.DebugLog("파싱된 결과: %s -> IsSponsored: %v\n", analyzedResult.Link, analyzedResult.IsSponsored)
 		}
 	} else {
 		utils.DebugLog("테이블 %s에서 응답 없음\n", r.tableName)
