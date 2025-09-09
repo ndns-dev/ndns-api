@@ -9,4 +9,5 @@ type AnalyzedResult struct {
 	IsSponsored        bool                         `json:"isSponsored" dynamodbav:"isSponsored"`
 	SponsorProbability float64                      `json:"sponsorProbability" dynamodbav:"sponsorProbability"`
 	SponsorIndicators  []structure.SponsorIndicator `json:"sponsorIndicators" dynamodbav:"sponsorIndicators"`
+	Location           *structure.Location          `json:"location,omitempty" dynamodbav:"location,omitempty"`
 }

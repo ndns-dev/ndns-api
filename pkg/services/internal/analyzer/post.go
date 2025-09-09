@@ -51,6 +51,8 @@ func (s *AnalyzerService) AnalyzePosts(posts []structure.NaverSearchItem, reqId 
 				IsSponsored:        false,
 				SponsorProbability: 0,
 				SponsorIndicators:  []structure.SponsorIndicator{},
+				Error:              "",
+				Location:           nil,
 			}
 
 			// 1. Description 텍스트 탐지 수행
@@ -60,7 +62,7 @@ func (s *AnalyzerService) AnalyzePosts(posts []structure.NaverSearchItem, reqId 
 				updateAnalyzedResponse(&blogPost, isSponsored, probability, indicators)
 			} else {
 				// 2. Description에서 스폰서 탐지 실패시 본문 크롤링
-				crawlResult, err := crawler.CrawlAnalyzedResponse(item.Link, is2025OrLater)
+				crawlResult, location, err := crawler.CrawlAnalyzedResponse(item.Link, is2025OrLater)
 				if err != nil {
 					fmt.Printf("[%d] 크롤링 실패: %v\n", index, err)
 					blogPost.Error = fmt.Sprintf("크롤링 실패: %v", err)
@@ -77,6 +79,9 @@ func (s *AnalyzerService) AnalyzePosts(posts []structure.NaverSearchItem, reqId 
 					mu.Unlock()
 					return
 				}
+
+				// Location을 AnalyzedResponse에 포함
+				blogPost.Location = location
 
 				// 3. 첫 번째 문단 분석
 				if !blogPost.IsSponsored {
@@ -111,6 +116,7 @@ func (s *AnalyzerService) AnalyzePosts(posts []structure.NaverSearchItem, reqId 
 							JobId:           jobId,
 							ReqId:           reqId,
 							CrawlResult:     crawlResult,
+							Location:        location,
 							CurrentPosition: model.OcrPositionStart,
 							Is2025OrLater:   is2025OrLater,
 						}
@@ -157,6 +163,8 @@ func (s *AnalyzerService) GetExistingPosts(posts []structure.NaverSearchItem) ([
 				IsSponsored:        analyzedResult.IsSponsored,
 				SponsorProbability: analyzedResult.SponsorProbability,
 				SponsorIndicators:  analyzedResult.SponsorIndicators,
+				Error:              "",
+				Location:           analyzedResult.Location,
 			})
 		}
 	}

@@ -134,6 +134,15 @@ func (r *AnalyzedResultRepositoryImpl) GetAnalyzedResults(links []string) (map[s
 					utils.DebugLog("SponsorIndicators JSON 파싱 실패: %v\n", err)
 				}
 			}
+			// Location 파싱 (JSON 문자열에서)
+			if locationVal, ok := item["location"].(*types.AttributeValueMemberS); ok {
+				var location structure.Location
+				if err := json.Unmarshal([]byte(locationVal.Value), &location); err == nil {
+					analyzedResult.Location = &location
+				} else {
+					utils.DebugLog("Location JSON 파싱 실패: %v\n", err)
+				}
+			}
 
 			analyzedResults[analyzedResult.Link] = analyzedResult
 		}
@@ -150,15 +159,24 @@ func (r *AnalyzedResultRepositoryImpl) SaveAnalyzedResult(result *model.Analyzed
 	// SponsorIndicators를 JSON으로 직렬화
 	indicatorsJSON, _ := json.Marshal(result.SponsorIndicators)
 
+	// DynamoDB 아이템 생성
+	item := map[string]types.AttributeValue{
+		"link":               &types.AttributeValueMemberS{Value: result.Link},
+		"isSponsored":        &types.AttributeValueMemberBOOL{Value: result.IsSponsored},
+		"sponsorProbability": &types.AttributeValueMemberN{Value: strconv.FormatFloat(result.SponsorProbability, 'f', -1, 64)},
+		"sponsorIndicators":  &types.AttributeValueMemberS{Value: string(indicatorsJSON)},
+	}
+
+	// Location이 있으면 JSON으로 직렬화하여 저장
+	if result.Location != nil {
+		locationJSON, _ := json.Marshal(result.Location)
+		item["location"] = &types.AttributeValueMemberS{Value: string(locationJSON)}
+	}
+
 	// 분석결과 저장
 	r.client.PutItem(context.TODO(), &dynamodb.PutItemInput{
 		TableName: aws.String(r.tableName),
-		Item: map[string]types.AttributeValue{
-			"link":               &types.AttributeValueMemberS{Value: result.Link},
-			"isSponsored":        &types.AttributeValueMemberBOOL{Value: result.IsSponsored},
-			"sponsorProbability": &types.AttributeValueMemberN{Value: strconv.FormatFloat(result.SponsorProbability, 'f', -1, 64)},
-			"sponsorIndicators":  &types.AttributeValueMemberS{Value: string(indicatorsJSON)},
-		},
+		Item:      item,
 	})
 	return nil
 }
@@ -175,14 +193,23 @@ func (r *AnalyzedResultRepositoryImpl) SaveAnalyzedResults(results []*model.Anal
 		// SponsorIndicators를 JSON으로 직렬화
 		indicatorsJSON, _ := json.Marshal(result.SponsorIndicators)
 
+		// DynamoDB 아이템 생성
+		item := map[string]types.AttributeValue{
+			"link":               &types.AttributeValueMemberS{Value: result.Link},
+			"isSponsored":        &types.AttributeValueMemberBOOL{Value: result.IsSponsored},
+			"sponsorProbability": &types.AttributeValueMemberN{Value: strconv.FormatFloat(result.SponsorProbability, 'f', -1, 64)},
+			"sponsorIndicators":  &types.AttributeValueMemberS{Value: string(indicatorsJSON)},
+		}
+
+		// Location이 있으면 JSON으로 직렬화하여 저장
+		if result.Location != nil {
+			locationJSON, _ := json.Marshal(result.Location)
+			item["location"] = &types.AttributeValueMemberS{Value: string(locationJSON)}
+		}
+
 		writeRequests[i] = types.WriteRequest{
 			PutRequest: &types.PutRequest{
-				Item: map[string]types.AttributeValue{
-					"link":               &types.AttributeValueMemberS{Value: result.Link},
-					"isSponsored":        &types.AttributeValueMemberBOOL{Value: result.IsSponsored},
-					"sponsorProbability": &types.AttributeValueMemberN{Value: strconv.FormatFloat(result.SponsorProbability, 'f', -1, 64)},
-					"sponsorIndicators":  &types.AttributeValueMemberS{Value: string(indicatorsJSON)},
-				},
+				Item: item,
 			},
 		}
 	}

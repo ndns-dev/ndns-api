@@ -24,6 +24,13 @@ type NaverSearchResponse struct {
 	Items         []NaverSearchItem `json:"items"`
 }
 
+type Location struct {
+	Latitude  string `json:"latitude"`
+	Longitude string `json:"longitude"`
+	Name      string `json:"name"`
+	Address   string `json:"address"`
+}
+
 type CrawlResult struct {
 	Url              string `json:"url"`
 	FirstParagraph   string `json:"firstParagraph"`

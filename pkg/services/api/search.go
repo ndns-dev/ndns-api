@@ -130,6 +130,7 @@ func (s *SearchImpl) SaveAnalyzeCycleResult(response *responseDto.AnalyzeJobResp
 			IsSponsored:        response.IsSponsored,
 			SponsorProbability: response.SponsorProbability,
 			SponsorIndicators:  []structure.SponsorIndicator{},
+			Location:           state.Location,
 		}
 
 		// SponsorIndicator가 있으면 추가

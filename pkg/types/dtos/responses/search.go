@@ -28,6 +28,7 @@ type AnalyzedResponse struct {
 	SponsorProbability float64                      `json:"sponsorProbability"`
 	SponsorIndicators  []structure.SponsorIndicator `json:"sponsorIndicators"`
 	Error              string                       `json:"error,omitempty"`
+	Location           *structure.Location          `json:"location,omitempty"`
 }
 
 type AnalyzeJobResponse struct {

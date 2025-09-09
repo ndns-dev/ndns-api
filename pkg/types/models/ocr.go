@@ -35,5 +35,6 @@ type OcrQueueState struct {
 	CurrentPosition OcrPosition            `json:"currentPosition" dynamodbav:"currentPosition"`             // 현재 OCR 위치
 	Is2025OrLater   bool                   `json:"is2025OrLater" dynamodbav:"is2025OrLater"`                 // 2025년 이후 포스트 여부
 	CrawlResult     *structure.CrawlResult `json:"crawlResult,omitempty" dynamodbav:"crawlResult,omitempty"` // 크롤링 결과
+	Location        *structure.Location    `json:"location,omitempty" dynamodbav:"location,omitempty"`       // 지도 정보
 	RequestedAt     time.Time              `json:"requestedAt" dynamodbav:"requestedAt"`                     // 요청 시간
 }

@@ -3,6 +3,7 @@ package crawler
 import (
 	"encoding/json"
 	"fmt"
+	"html"
 	"net/http"
 	"regexp"
 	"strings"
@@ -17,9 +18,9 @@ import (
 
 // CrawlAnalyzedResponse는 블로그 포스트 Url에서 콘텐츠를 크롤링합니다
 // is2025OrLater가 true일 경우 마지막 데이터는 가져오지 않습니다.
-func CrawlAnalyzedResponse(url string, is2025OrLater bool) (*structure.CrawlResult, error) {
+func CrawlAnalyzedResponse(url string, is2025OrLater bool) (*structure.CrawlResult, *structure.Location, error) {
 	if url == "" {
-		return nil, fmt.Errorf("Url이 비어 있습니다")
+		return nil, nil, fmt.Errorf("Url이 비어 있습니다")
 	}
 
 	// Url 정규화
@@ -28,15 +29,24 @@ func CrawlAnalyzedResponse(url string, is2025OrLater bool) (*structure.CrawlResu
 
 	// 결과 초기화
 	result := &structure.CrawlResult{
-		Url: url,
+		Url:              url,
+		FirstParagraph:   "",
+		LastParagraph:    "",
+		Content:          "",
+		FirstImageUrl:    "",
+		LastImageUrl:     "",
+		FirstStickerUrl:  "",
+		SecondStickerUrl: "",
+		LastStickerUrl:   "",
 	}
+	var location *structure.Location
 
 	// 네이버 블로그인 경우 특별 처리
 	if strings.Contains(url, "blog.naver.com") {
 		// 먼저 프레임셋 페이지 가져오기
 		framesetDoc, err := fetchHTML(url)
 		if err != nil {
-			return nil, fmt.Errorf("프레임셋 페이지 가져오기 실패: %v", err)
+			return nil, nil, fmt.Errorf("프레임셋 페이지 가져오기 실패: %v", err)
 		}
 
 		// iframe 태그에서 실제 콘텐츠 Url 추출
@@ -44,19 +54,19 @@ func CrawlAnalyzedResponse(url string, is2025OrLater bool) (*structure.CrawlResu
 		if iframeUrl != "" {
 			contentDoc, err := fetchHTML(iframeUrl)
 			if err != nil {
-				return nil, fmt.Errorf("iframe 내부 콘텐츠 가져오기 실패: %v", err)
+				return nil, nil, fmt.Errorf("iframe 내부 콘텐츠 가져오기 실패: %v", err)
 			}
 			// 2025년 이후 포스트 여부에 따라 다른 파싱 함수 호출
 			if is2025OrLater {
-				parseNaverBlogFirst(contentDoc, result)
+				location = parseNaverBlogFirst(contentDoc, result)
 			} else {
-				parseNaverBlogFull(contentDoc, result)
+				location = parseNaverBlogFull(contentDoc, result)
 			}
 		}
 	} else {
-		return nil, fmt.Errorf("지원하지 않는 블로그 플랫폼입니다")
+		return nil, nil, fmt.Errorf("지원하지 않는 블로그 플랫폼입니다")
 	}
-	return result, nil
+	return result, location, nil
 }
 
 // fetchHTML은 Url에서 HTML을 가져와 goquery.Document로 반환합니다
@@ -126,23 +136,27 @@ func extractNaverIframeUrl(doc *goquery.Document, originalUrl string) string {
 }
 
 // parseNaverBlogFirst는 네이버 블로그 HTML에서 첫 번째 데이터만 파싱합니다 (2025년 이후)
-func parseNaverBlogFirst(doc *goquery.Document, result *structure.CrawlResult) {
+func parseNaverBlogFirst(doc *goquery.Document, result *structure.CrawlResult) *structure.Location {
 	// 첫 번째 스티커 이미지 추출
 	extractFirstStickerOnly(doc, result)
 	// 첫 번째 일반 이미지 추출
 	extractFirstImageOnly(doc, result)
 	// 첫 번째 문단 추출
 	extractFirstParagraphOnly(doc, result)
+	// 지도 정보 추출
+	return extractLocationFromDocument(doc)
 }
 
 // parseNaverBlogFull은 네이버 블로그 HTML에서 모든 데이터를 파싱합니다 (2025년 이전)
-func parseNaverBlogFull(doc *goquery.Document, result *structure.CrawlResult) {
+func parseNaverBlogFull(doc *goquery.Document, result *structure.CrawlResult) *structure.Location {
 	// 첫 번째 스티커 이미지 추출
 	extractFirstSticker(doc, result)
 	// 일반 이미지 추출
 	extractFirstImage(doc, result)
 	// 첫 문단 추출
 	extractFirstParagraph(doc, result)
+	// 지도 정보 추출
+	return extractLocationFromDocument(doc)
 }
 
 // extractFirstStickerOnly는 첫 번째 스티커만 추출합니다 (2025년 이후 포스트용)
@@ -237,7 +251,7 @@ func extractFirstImageOnly(doc *goquery.Document, result *structure.CrawlResult)
 		contentArea = doc.Selection
 	}
 
-	// 이미지 검색 (첫 번째 이미지만 찾음)
+	// 이미지 검색 (첫 번째 이미지만 찾음, 동시에 지도 정보도 확인)
 	contentArea.Find("img").Each(func(i int, img *goquery.Selection) {
 		// 상위 요소가 스티커 관련 요소가 아닌지 확인
 		if img.ParentsFiltered("[class*='sticker']").Length() > 0 {
@@ -285,6 +299,7 @@ func extractFirstImageOnly(doc *goquery.Document, result *structure.CrawlResult)
 	if strings.HasSuffix(result.FirstImageUrl, "w80_blur") {
 		result.FirstImageUrl = strings.Replace(result.FirstImageUrl, "w80_blur", "w773", 1)
 	}
+
 }
 
 // extractCommonParagraphs는 HTML 문서에서 문단을 추출하는 공통 함수입니다
@@ -691,7 +706,7 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 		}
 	})
 
-	// 3. 일반 이미지 확인
+	// 3. 일반 이미지 확인 (동시에 지도 정보도 확인)
 	contentArea.Find("img").Each(func(i int, img *goquery.Selection) {
 		// 상위 요소가 스티커 관련 요소가 아닌지 확인
 		if img.ParentsFiltered("[class*='sticker']").Length() > 0 {
@@ -739,6 +754,61 @@ func extractFirstImage(doc *goquery.Document, result *structure.CrawlResult) {
 			result.LastImageUrl = result.FirstImageUrl
 		}
 	}
+}
+
+// extractLocationFromDocument는 HTML 문서에서 지도 정보를 추출합니다
+func extractLocationFromDocument(doc *goquery.Document) *structure.Location {
+	mapSelectors := []string{
+		".se-map-info",          // 스마트에디터 지도 정보
+		"[data-linktype='map']", // 지도 링크 타입
+		".se-component.se-map",  // 지도 컴포넌트
+	}
+
+	for _, selector := range mapSelectors {
+		mapElements := doc.Find(selector)
+		if mapElements.Length() > 0 {
+			var foundLocation *structure.Location
+			mapElements.Each(func(i int, elem *goquery.Selection) {
+				linkData := elem.AttrOr("data-linkdata", "")
+				if linkData != "" {
+					// HTML 엔티티 디코딩
+					decodedLinkData := html.UnescapeString(linkData)
+
+					var data map[string]interface{}
+					err := json.Unmarshal([]byte(decodedLinkData), &data)
+					if err == nil {
+						// 위도와 경도가 있는지 확인
+						if data["latitude"] != nil && data["longitude"] != nil {
+							location := &structure.Location{
+								Latitude:  data["latitude"].(string),
+								Longitude: data["longitude"].(string),
+								Name:      "",
+								Address:   "",
+							}
+
+							// 이름과 주소 정보도 있으면 추가
+							if data["name"] != nil {
+								location.Name = data["name"].(string)
+							}
+							if data["address"] != nil {
+								location.Address = data["address"].(string)
+							}
+
+							foundLocation = location
+							return
+						}
+					}
+				}
+			})
+
+			// 위치 정보를 찾았으면 반환
+			if foundLocation != nil {
+				return foundLocation
+			}
+		}
+	}
+
+	return nil
 }
 
 // extractFirstParagraph는 첫 번째와 마지막 문단과 인용구를 추출합니다
